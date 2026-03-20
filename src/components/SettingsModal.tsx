@@ -9,23 +9,17 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const [tbaKey, setTbaKey] = useState(storage.get<string>('tbaApiKey') || 'o8PwvlOVbzVgr95eahTOhJwixVUKkmeSdtqVJ5Z9EaVnUigrM0qR32cad9D8Qlkf');
-  const [geminiKey, setGeminiKey] = useState(storage.get<string>('geminiApiKey') || '');
   const [backendUrl, setBackendUrl] = useState(storage.get<string>('backendUrl') || window.location.origin);
   const [eventKey, setEventKey] = useState(storage.get<string>('eventKey') || '');
 
   useEffect(() => {
     if (isOpen) {
-      setTbaKey(storage.get<string>('tbaApiKey') || 'o8PwvlOVbzVgr95eahTOhJwixVUKkmeSdtqVJ5Z9EaVnUigrM0qR32cad9D8Qlkf');
-      setGeminiKey(storage.get<string>('geminiApiKey') || '');
       setBackendUrl(storage.get<string>('backendUrl') || window.location.origin);
       setEventKey(storage.get<string>('eventKey') || '');
     }
   }, [isOpen]);
 
   const handleSave = () => {
-    storage.set('tbaApiKey', tbaKey);
-    storage.set('geminiApiKey', geminiKey);
     storage.set('backendUrl', backendUrl);
     storage.set('eventKey', eventKey);
     onClose();
@@ -53,27 +47,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             
             <div className="p-6 space-y-6">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">TBA API Key</label>
-                <input
-                  type="text"
-                  value={tbaKey}
-                  onChange={(e) => setTbaKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">Gemini API Key</label>
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-300">Backend URL</label>
                 <input
                   type="url"
@@ -94,6 +67,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm uppercase"
                 />
               </div>
+
+              <p className="text-xs text-slate-400">
+                TBA and Gemini API keys are loaded from server environment variables.
+              </p>
             </div>
             
             <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end">

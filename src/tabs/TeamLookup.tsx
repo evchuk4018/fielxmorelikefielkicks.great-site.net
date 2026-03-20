@@ -3,7 +3,7 @@ import { storage } from '../lib/storage';
 import { tba } from '../lib/tba';
 import { gemini } from '../lib/gemini';
 import { showToast } from '../components/Toast';
-import { TBATeam, TBAMatch } from '../types';
+import { TBATeam } from '../types';
 
 export function TeamLookup() {
   const [activeTab, setActiveTab] = useState<'tba' | 'gemini'>('tba');
@@ -11,15 +11,10 @@ export function TeamLookup() {
   const [csvData, setCsvData] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [teams, setTeams] = useState<TBATeam[]>(tba.getTeams());
-  const [matches, setMatches] = useState<TBAMatch[]>(tba.getMatches());
+  const [matchesCount, setMatchesCount] = useState<number>(tba.getMatches().length);
   const [importLog, setImportLog] = useState<string | null>(null);
 
   const handleLoadTeams = async () => {
-    const apiKey = storage.get<string>('tbaApiKey');
-    if (!apiKey) {
-      showToast('TBA API Key missing in Settings');
-      return;
-    }
     if (!eventKey) {
       showToast('Event Key required');
       return;
@@ -27,7 +22,7 @@ export function TeamLookup() {
 
     setIsLoading(true);
     try {
-      const loadedTeams = await tba.fetchTeams(eventKey, apiKey);
+      const loadedTeams = await tba.fetchTeams(eventKey);
       setTeams(loadedTeams);
       storage.set('eventKey', eventKey);
       showToast(`Loaded ${loadedTeams.length} teams`);
@@ -39,11 +34,6 @@ export function TeamLookup() {
   };
 
   const handleLoadMatches = async () => {
-    const apiKey = storage.get<string>('tbaApiKey');
-    if (!apiKey) {
-      showToast('TBA API Key missing in Settings');
-      return;
-    }
     if (!eventKey) {
       showToast('Event Key required');
       return;
@@ -51,8 +41,8 @@ export function TeamLookup() {
 
     setIsLoading(true);
     try {
-      const loadedMatches = await tba.fetchMatches(eventKey, apiKey);
-      setMatches(loadedMatches);
+      const loadedMatches = await tba.fetchMatches(eventKey);
+      setMatchesCount(loadedMatches.length);
       storage.set('eventKey', eventKey);
       showToast(`Loaded ${loadedMatches.length} matches`);
     } catch (error) {
@@ -63,11 +53,6 @@ export function TeamLookup() {
   };
 
   const handleImportCSV = async () => {
-    const apiKey = storage.get<string>('geminiApiKey');
-    if (!apiKey) {
-      showToast('Gemini API Key missing in Settings');
-      return;
-    }
     if (!csvData.trim()) {
       showToast('CSV data required');
       return;
@@ -76,7 +61,7 @@ export function TeamLookup() {
     setIsLoading(true);
     setImportLog(null);
     try {
-      const records = await gemini.analyzeCSV(csvData, apiKey);
+      const records = await gemini.analyzeCSV(csvData);
       
       let newCount = 0;
       let dupCount = 0;
@@ -201,7 +186,7 @@ export function TeamLookup() {
 
           <div className="flex justify-between items-center">
             <div className="text-sm text-slate-400">
-              Requires Gemini API Key in Settings
+              Gemini analysis uses server-side API key from environment
             </div>
             <button
               onClick={handleImportCSV}
@@ -215,6 +200,12 @@ export function TeamLookup() {
           {importLog && (
             <div className="p-4 bg-slate-900/50 border border-slate-700 rounded-xl text-sm font-mono text-emerald-400">
               {importLog}
+            </div>
+          )}
+
+          {matchesCount > 0 && (
+            <div className="text-sm text-slate-400">
+              Cached matches available: {matchesCount}
             </div>
           )}
         </div>

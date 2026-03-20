@@ -3,23 +3,43 @@ import db from '../db.js';
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  try {
-    const pitScouts = db.prepare('SELECT * FROM pit_scouts').all();
-    const matchScouts = db.prepare('SELECT * FROM match_scouts').all();
+function normalizeJsonPayload(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return JSON.parse(value);
+  }
+  return value;
+}
 
-    const formattedPitScouts = pitScouts.map((row: any) => ({
+router.get('/', async (req, res) => {
+  try {
+    const [pitResult, matchResult] = await Promise.all([
+      db.from('pit_scouts').select('id, data, updated_at'),
+      db.from('match_scouts').select('id, data, updated_at'),
+    ]);
+
+    if (pitResult.error) {
+      throw pitResult.error;
+    }
+
+    if (matchResult.error) {
+      throw matchResult.error;
+    }
+
+    const pitScouts = pitResult.data ?? [];
+    const matchScouts = matchResult.data ?? [];
+
+    const formattedPitScouts = pitScouts.map((row) => ({
       id: row.id,
       type: 'pitScout',
       timestamp: new Date(row.updated_at).getTime(),
-      data: JSON.parse(row.data),
+      data: normalizeJsonPayload(row.data),
     }));
 
-    const formattedMatchScouts = matchScouts.map((row: any) => ({
+    const formattedMatchScouts = matchScouts.map((row) => ({
       id: row.id,
       type: 'matchScout',
       timestamp: new Date(row.updated_at).getTime(),
-      data: JSON.parse(row.data),
+      data: normalizeJsonPayload(row.data),
     }));
 
     res.json({
