@@ -133,6 +133,7 @@ export function TeamLookup() {
         `Parsed ${result.parsed} rows. Submitted ${normalized.length} rows into match scouts. Added ${result.added} new, updated ${result.updated}, skipped ${result.skipped}.`
       );
       showToast('Rows submitted to match scouts');
+      window.dispatchEvent(new CustomEvent('team-import-success'));
       setCsvData('');
       setParsedTeams([]);
     } catch (error) {

@@ -1,55 +1,183 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { storage } from '../lib/storage';
 import { MatchScoutData, SyncRecord, TBATeam } from '../types';
 import { scoring } from '../lib/scoring';
 import { tba } from '../lib/tba';
+import { supabase } from '../lib/supabase';
+
+type StrategyMatchData = MatchScoutData & {
+  previousCompRank?: string;
+  autoNotes?: string;
+  importedFrom?: string;
+};
+
+type MatchScoutRow = {
+  data: unknown;
+};
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeMatchScoutData(raw: any): StrategyMatchData | null {
+  const teamNumber = toFiniteNumber(raw?.teamNumber, NaN);
+  const matchNumber = toFiniteNumber(raw?.matchNumber, NaN);
+
+  if (!Number.isFinite(teamNumber) || teamNumber <= 0) {
+    return null;
+  }
+
+  return {
+    matchNumber: Number.isFinite(matchNumber) ? matchNumber : -1,
+    teamNumber,
+    allianceColor: raw?.allianceColor === 'Red' || raw?.allianceColor === 'Blue' ? raw.allianceColor : '',
+    leftStartingZone: Boolean(raw?.leftStartingZone),
+    autoFuelScored: toFiniteNumber(raw?.autoFuelScored ?? raw?.autoFuelCount, 0),
+    autoClimbAttempted: Boolean(raw?.autoClimbAttempted),
+    autoClimbResult: raw?.autoClimbResult,
+    teleopFuelScored: toFiniteNumber(raw?.teleopFuelScored, 0),
+    avgBps: toFiniteNumber(raw?.avgBps, 0),
+    shootingConsistency: toFiniteNumber(raw?.shootingConsistency, 3),
+    intakeConsistency: toFiniteNumber(raw?.intakeConsistency, 3),
+    droveOverBump: Boolean(raw?.droveOverBump),
+    droveUnderTrench: Boolean(raw?.droveUnderTrench),
+    playedDefense: Boolean(raw?.playedDefense),
+    defenseEffectiveness: raw?.defenseEffectiveness,
+    defendedAgainst: Boolean(raw?.defendedAgainst),
+    hubScoringStrategy: raw?.hubScoringStrategy || '',
+    endGameClimbResult: raw?.endGameClimbResult || '',
+    climbTimeSeconds: raw?.climbTimeSeconds ?? '',
+    foulsCaused: toFiniteNumber(raw?.foulsCaused, 0),
+    cardReceived: raw?.cardReceived || '',
+    notes: typeof raw?.notes === 'string' && raw.notes.trim() !== '' ? raw.notes : (raw?.autoNotes || ''),
+    previousCompRank: typeof raw?.previousCompRank === 'string' ? raw.previousCompRank : '',
+    autoNotes: typeof raw?.autoNotes === 'string' ? raw.autoNotes : '',
+    importedFrom: typeof raw?.importedFrom === 'string' ? raw.importedFrom : '',
+  };
+}
 
 export function AllianceStrategy() {
   const [blueTeams, setBlueTeams] = useState<number[]>([]);
   const [redTeams, setRedTeams] = useState<number[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<number | ''>('');
   const [selectedAlliance, setSelectedAlliance] = useState<'Blue' | 'Red'>('Blue');
+  const [allMatches, setAllMatches] = useState<StrategyMatchData[]>([]);
 
-  const allMatches = useMemo(() => {
-    const keys = storage.getAllKeys().filter(k => k.startsWith('matchScout:'));
-    return keys.map(k => storage.get<SyncRecord<MatchScoutData>>(k)?.data).filter(Boolean) as MatchScoutData[];
+  useEffect(() => {
+    const loadMatches = async () => {
+      const localKeys = storage.getAllKeys().filter(k => k.startsWith('matchScout:'));
+      const localMatches = localKeys
+        .map(k => storage.get<SyncRecord<MatchScoutData>>(k)?.data)
+        .map(normalizeMatchScoutData)
+        .filter(Boolean) as StrategyMatchData[];
+
+      let remoteMatches: StrategyMatchData[] = [];
+
+      const { data, error } = await supabase
+        .from('match_scouts')
+        .select('data');
+
+      if (error) {
+        console.error('[AllianceStrategy] Failed to fetch match_scouts from Supabase', error);
+      } else {
+        remoteMatches = ((data || []) as MatchScoutRow[])
+          .map((row) => normalizeMatchScoutData(row.data))
+          .filter(Boolean) as StrategyMatchData[];
+      }
+
+      const merged = new Map<string, StrategyMatchData>();
+      [...localMatches, ...remoteMatches].forEach((match) => {
+        merged.set(`${match.matchNumber}:${match.teamNumber}`, match);
+      });
+
+      const mergedMatches = Array.from(merged.values());
+      setAllMatches(mergedMatches);
+
+      console.info('[AllianceStrategy] Match data refresh complete', {
+        localCount: localMatches.length,
+        remoteCount: remoteMatches.length,
+        mergedCount: mergedMatches.length,
+        importedCount: mergedMatches.filter((m) => m.matchNumber === -1).length,
+        realMatchCount: mergedMatches.filter((m) => m.matchNumber !== -1).length,
+      });
+    };
+
+    loadMatches();
+
+    const handleRefresh = () => {
+      loadMatches();
+    };
+
+    window.addEventListener('sync-success', handleRefresh);
+    window.addEventListener('team-import-success', handleRefresh);
+    window.addEventListener('storage', handleRefresh);
+
+    return () => {
+      window.removeEventListener('sync-success', handleRefresh);
+      window.removeEventListener('team-import-success', handleRefresh);
+      window.removeEventListener('storage', handleRefresh);
+    };
   }, []);
 
-  const tbaTeams = useMemo(() => tba.getTeams(), []);
+  const tbaTeams: TBATeam[] = tba.getTeams();
 
   const getTeamStats = (teamNumber: number) => {
     const matches = allMatches.filter(m => m.teamNumber === teamNumber);
-    const count = matches.length;
-    
-    if (count === 0) return null;
+    const importedRows = matches.filter((m) => m.matchNumber === -1);
+    const realMatches = matches.filter((m) => m.matchNumber !== -1);
+    const statMatches = realMatches.length > 0 ? realMatches : matches;
+    const count = statMatches.length;
 
-    const totalFuel = matches.reduce((sum, m) => sum + scoring.getFuelPoints(m.autoFuelScored, m.teleopFuelScored), 0);
-    const totalAutoFuel = matches.reduce((sum, m) => sum + m.autoFuelScored, 0);
-    const totalBps = matches.reduce((sum, m) => sum + m.avgBps, 0);
-    const totalShootingConsistency = matches.reduce((sum, m) => sum + m.shootingConsistency, 0);
+    console.debug('[AllianceStrategy] Team lookup', {
+      teamNumber,
+      totalRows: matches.length,
+      importedRows: importedRows.length,
+      realMatches: realMatches.length,
+      sampleTeams: Array.from(new Set(allMatches.map((m) => m.teamNumber))).slice(0, 20),
+    });
     
-    const climbSuccesses = matches.filter(m => ['Level 1', 'Level 2', 'Level 3'].includes(m.endGameClimbResult)).length;
-    const totalTowerPoints = matches.reduce((sum, m) => sum + scoring.getTowerPoints(m.endGameClimbResult, m.autoClimbResult), 0);
+    if (matches.length === 0) return null;
+
+    const totalFuel = statMatches.reduce((sum, m) => sum + scoring.getFuelPoints(m.autoFuelScored, m.teleopFuelScored), 0);
+    const totalAutoFuel = statMatches.reduce((sum, m) => sum + m.autoFuelScored, 0);
+    const totalBps = statMatches.reduce((sum, m) => sum + m.avgBps, 0);
+    const totalShootingConsistency = statMatches.reduce((sum, m) => sum + m.shootingConsistency, 0);
     
-    const climbLevels = matches.map(m => m.endGameClimbResult).filter(r => ['Level 1', 'Level 2', 'Level 3'].includes(r));
+    const climbSuccesses = statMatches.filter(m => ['Level 1', 'Level 2', 'Level 3'].includes(m.endGameClimbResult)).length;
+    const totalTowerPoints = statMatches.reduce((sum, m) => sum + scoring.getTowerPoints(m.endGameClimbResult, m.autoClimbResult), 0);
+    
+    const climbLevels = statMatches.map(m => m.endGameClimbResult).filter(r => ['Level 1', 'Level 2', 'Level 3'].includes(r));
     const preferredClimbLevel = climbLevels.length > 0 
       ? climbLevels.sort((a,b) => climbLevels.filter(v => v===a).length - climbLevels.filter(v => v===b).length).pop() 
       : 'None';
 
-    const droveOverBump = matches.some(m => m.droveOverBump);
-    const droveUnderTrench = matches.some(m => m.droveUnderTrench);
+    const droveOverBump = statMatches.some(m => m.droveOverBump);
+    const droveUnderTrench = statMatches.some(m => m.droveUnderTrench);
     let traversal = 'Neither';
     if (droveOverBump && droveUnderTrench) traversal = 'Both';
     else if (droveOverBump) traversal = 'Bump';
     else if (droveUnderTrench) traversal = 'Trench';
 
-    const defensePlayed = matches.filter(m => m.playedDefense);
+    const defensePlayed = statMatches.filter(m => m.playedDefense);
     const defenseRate = defensePlayed.length / count;
     const avgDefenseEffectiveness = defensePlayed.length > 0 
       ? defensePlayed.reduce((sum, m) => sum + (m.defenseEffectiveness || 0), 0) / defensePlayed.length 
       : 0;
 
-    const totalFouls = matches.reduce((sum, m) => sum + m.foulsCaused, 0);
+    const totalFouls = statMatches.reduce((sum, m) => sum + m.foulsCaused, 0);
+
+    const importedSnapshot = importedRows[0];
 
     return {
       teamNumber,
@@ -65,7 +193,10 @@ export function AllianceStrategy() {
       defenseRate,
       avgDefenseEffectiveness,
       avgFouls: totalFouls / count,
-      notes: matches.filter(m => m.notes).map(m => ({ match: m.matchNumber, note: m.notes }))
+      previousCompRank: importedSnapshot?.previousCompRank || '',
+      notes: matches.filter(m => m.notes).map(m => ({ match: m.matchNumber, note: m.notes })),
+      importedRows: importedRows.length,
+      realMatches: realMatches.length,
     };
   };
 
@@ -103,6 +234,14 @@ export function AllianceStrategy() {
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="space-y-1">
+            <span className="text-slate-400 block">Rows</span>
+            <span className="font-mono text-lg text-white">{stats.realMatches} real / {stats.importedRows} imported</span>
+          </div>
+          <div className="space-y-1">
+            <span className="text-slate-400 block">Prev Rank</span>
+            <span className="font-mono text-lg text-white">{stats.previousCompRank || 'N/A'}</span>
+          </div>
           <div className="space-y-1">
             <span className="text-slate-400 block">Avg Fuel</span>
             <span className="font-mono text-lg text-white">{stats.avgFuel.toFixed(1)}</span>
