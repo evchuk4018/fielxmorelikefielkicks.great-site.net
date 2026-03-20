@@ -41,11 +41,23 @@ function normalizeRecord(record) {
   const autoFuelCount = toNullableNumber(record?.autoFuelCount);
   const autoNotes = typeof record?.autoNotes === 'string' ? record.autoNotes.trim() : '';
 
+  const importData = {
+    matchNumber: -1,
+    teamNumber,
+    allianceColor: '',
+    previousCompRank,
+    autoFuelCount,
+    autoNotes,
+    importedFrom: 'teamImport',
+  };
+
   return {
+    id: `team-import:${teamNumber}`,
+    match_number: -1,
     team_number: teamNumber,
-    previous_comp_rank: previousCompRank,
-    auto_fuel_count: autoFuelCount,
-    auto_notes: autoNotes,
+    alliance: null,
+    previous_team_ranking: previousCompRank,
+    data: importData,
   };
 }
 
@@ -80,28 +92,28 @@ export default async function handler(req, res) {
   });
 
   try {
-    const teamNumbers = normalizedRows.map((row) => row.team_number);
+    const rowIds = normalizedRows.map((row) => row.id);
 
     const { data: existingRows, error: existingError } = await supabase
-      .from('team_imports')
-      .select('team_number')
-      .in('team_number', teamNumbers);
+      .from('match_scouts')
+      .select('id')
+      .in('id', rowIds);
 
     if (existingError) {
       return res.status(500).json({ error: existingError.message || 'Failed to check existing teams' });
     }
 
-    const existingTeamNumbers = new Set((existingRows || []).map((row) => row.team_number));
+    const existingRowIds = new Set((existingRows || []).map((row) => row.id));
 
     const { error: upsertError } = await supabase
-      .from('team_imports')
-      .upsert(normalizedRows, { onConflict: 'team_number' });
+      .from('match_scouts')
+      .upsert(normalizedRows, { onConflict: 'id' });
 
     if (upsertError) {
       return res.status(500).json({ error: upsertError.message || 'Failed to import teams' });
     }
 
-    const updated = normalizedRows.filter((row) => existingTeamNumbers.has(row.team_number)).length;
+    const updated = normalizedRows.filter((row) => existingRowIds.has(row.id)).length;
     const added = normalizedRows.length - updated;
     const skipped = records.length - normalizedRows.length;
 

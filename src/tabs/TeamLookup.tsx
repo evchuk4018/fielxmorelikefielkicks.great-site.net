@@ -130,14 +130,14 @@ export function TeamLookup() {
     try {
       const result = await gemini.importTeams(normalized);
       setImportLog(
-        `Parsed ${result.parsed} rows. Submitted ${normalized.length} teams. Added ${result.added} new, updated ${result.updated}, skipped ${result.skipped}.`
+        `Parsed ${result.parsed} rows. Submitted ${normalized.length} rows into match scouts. Added ${result.added} new, updated ${result.updated}, skipped ${result.skipped}.`
       );
-      showToast('Team import submitted to Supabase');
+      showToast('Rows submitted to match scouts');
       setCsvData('');
       setParsedTeams([]);
     } catch (error) {
       showToast('Failed to submit team import');
-      setImportLog('Submit failed. Confirm your Supabase env vars and team_imports table exist, then try again.');
+      setImportLog('Submit failed. Confirm your Supabase env vars and match_scouts schema columns exist, then try again.');
     } finally {
       setIsSubmittingImport(false);
     }
