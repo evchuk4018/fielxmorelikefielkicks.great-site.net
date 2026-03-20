@@ -1,13 +1,8 @@
 import { MatchScoutData } from '../types';
-import { storage } from './storage';
 
 export const gemini = {
-  getBackendUrl(): string {
-    return storage.get<string>('backendUrl') || window.location.origin;
-  },
-
   async analyzeCSV(csvData: string): Promise<MatchScoutData[]> {
-    const response = await fetch(`${this.getBackendUrl()}/api/gemini/analyze-csv`, {
+    const response = await fetch('/api/gemini/analyze-csv', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,18 +1,19 @@
-import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 
-const router = express.Router();
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-router.post('/analyze-csv', async (req, res) => {
   const csvData = req.body?.csvData;
-
   if (typeof csvData !== 'string' || !csvData.trim()) {
     return res.status(400).json({ error: 'csvData must be a non-empty string' });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server' });
+    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -64,11 +65,8 @@ ${csvData}
     const text = response.text || '[]';
     const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const records = JSON.parse(cleanedText);
-    res.json(records);
+    return res.status(200).json(records);
   } catch (error) {
-    console.error('Gemini CSV analysis failed:', error);
-    res.status(500).json({ error: 'Failed to analyze CSV data' });
+    return res.status(500).json({ error: 'Failed to analyze CSV data' });
   }
-});
-
-export default router;
+}

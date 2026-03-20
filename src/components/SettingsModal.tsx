@@ -9,18 +9,15 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const [backendUrl, setBackendUrl] = useState(storage.get<string>('backendUrl') || window.location.origin);
   const [eventKey, setEventKey] = useState(storage.get<string>('eventKey') || '');
 
   useEffect(() => {
     if (isOpen) {
-      setBackendUrl(storage.get<string>('backendUrl') || window.location.origin);
       setEventKey(storage.get<string>('eventKey') || '');
     }
   }, [isOpen]);
 
   const handleSave = () => {
-    storage.set('backendUrl', backendUrl);
     storage.set('eventKey', eventKey);
     onClose();
   };
@@ -47,17 +44,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             
             <div className="p-6 space-y-6">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">Backend URL</label>
-                <input
-                  type="url"
-                  value={backendUrl}
-                  onChange={(e) => setBackendUrl(e.target.value)}
-                  placeholder="https://your-backend.railway.app"
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-300">Default Event Key</label>
                 <input
                   type="text"
@@ -69,7 +55,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <p className="text-xs text-slate-400">
-                TBA and Gemini API keys are loaded from server environment variables.
+                Supabase, TBA, and Gemini keys are loaded from Vercel environment variables.
               </p>
             </div>
             

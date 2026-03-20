@@ -1,12 +1,39 @@
 import { storage } from './storage';
 import { SyncRecord } from '../types';
+import { supabase } from './supabase';
 
 export type SyncStatus = 'success' | 'pending' | 'error';
 
-let syncInterval: NodeJS.Timeout | null = null;
+let syncInterval: ReturnType<typeof setInterval> | null = null;
 let lastSyncTime: number | null = null;
 let currentStatus: SyncStatus = 'success';
 let listeners: ((status: SyncStatus, lastSync: number | null, pendingCount: number) => void)[] = [];
+
+type SupabaseScoutRow = {
+  id: string;
+  data: unknown;
+  updated_at: string;
+};
+
+function normalizeJsonPayload(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return JSON.parse(value);
+  }
+  return value;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
 
 export const syncManager = {
   start() {
@@ -43,37 +70,53 @@ export const syncManager = {
     listeners.forEach(l => l(currentStatus, lastSyncTime, pendingCount));
   },
 
-  getBackendUrl() {
-    return storage.get<string>('backendUrl') || window.location.origin;
-  },
-
   async initialSync() {
     try {
-      const response = await fetch(`${this.getBackendUrl()}/api/data`);
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Merge pit scouts
-        data.pitScouts.forEach((serverRecord: SyncRecord<any>) => {
-          const key = `pitScout:${serverRecord.data.teamNumber}`;
-          const localRecord = storage.get<SyncRecord<any>>(key);
-          if (!localRecord || serverRecord.timestamp > localRecord.timestamp) {
-            storage.set(key, serverRecord);
-          }
-        });
+      const [pitResult, matchResult] = await Promise.all([
+        supabase.from('pit_scouts').select('id, data, updated_at'),
+        supabase.from('match_scouts').select('id, data, updated_at'),
+      ]);
 
-        // Merge match scouts
-        data.matchScouts.forEach((serverRecord: SyncRecord<any>) => {
-          const key = `matchScout:${serverRecord.data.matchNumber}:${serverRecord.data.teamNumber}`;
-          const localRecord = storage.get<SyncRecord<any>>(key);
-          if (!localRecord || serverRecord.timestamp > localRecord.timestamp) {
-            storage.set(key, serverRecord);
-          }
-        });
-
-        lastSyncTime = Date.now();
-        currentStatus = storage.getSyncQueue().length > 0 ? 'pending' : 'success';
+      if (pitResult.error) {
+        throw pitResult.error;
       }
+
+      if (matchResult.error) {
+        throw matchResult.error;
+      }
+
+      (pitResult.data || []).forEach((row: SupabaseScoutRow) => {
+        const record = {
+          id: row.id,
+          type: 'pitScout',
+          timestamp: new Date(row.updated_at).getTime(),
+          data: normalizeJsonPayload(row.data),
+        } as SyncRecord<any>;
+
+        const key = `pitScout:${record.data.teamNumber}`;
+        const localRecord = storage.get<SyncRecord<any>>(key);
+        if (!localRecord || record.timestamp > localRecord.timestamp) {
+          storage.set(key, record);
+        }
+      });
+
+      (matchResult.data || []).forEach((row: SupabaseScoutRow) => {
+        const record = {
+          id: row.id,
+          type: 'matchScout',
+          timestamp: new Date(row.updated_at).getTime(),
+          data: normalizeJsonPayload(row.data),
+        } as SyncRecord<any>;
+
+        const key = `matchScout:${record.data.matchNumber}:${record.data.teamNumber}`;
+        const localRecord = storage.get<SyncRecord<any>>(key);
+        if (!localRecord || record.timestamp > localRecord.timestamp) {
+          storage.set(key, record);
+        }
+      });
+
+      lastSyncTime = Date.now();
+      currentStatus = storage.getSyncQueue().length > 0 ? 'pending' : 'success';
     } catch (error) {
       console.error('Initial sync failed:', error);
       currentStatus = 'error';
@@ -89,32 +132,38 @@ export const syncManager = {
     }
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const pitRows = queue
+        .filter(record => record.type === 'pitScout')
+        .map(record => ({
+          id: record.id,
+          team_number: toNullableNumber((record.data as any)?.teamNumber),
+          data: record.data,
+          updated_at: new Date(record.timestamp).toISOString(),
+        }));
 
-      const response = await fetch(`${this.getBackendUrl()}/api/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(queue),
-        signal: controller.signal
-      });
+      const matchRows = queue
+        .filter(record => record.type === 'matchScout')
+        .map(record => ({
+          id: record.id,
+          match_number: toNullableNumber((record.data as any)?.matchNumber),
+          team_number: toNullableNumber((record.data as any)?.teamNumber),
+          alliance: (record.data as any)?.allianceColor || null,
+          data: record.data,
+          updated_at: new Date(record.timestamp).toISOString(),
+        }));
 
-      clearTimeout(timeoutId);
+      const [pitResult, matchResult] = await Promise.all([
+        pitRows.length > 0 ? supabase.from('pit_scouts').upsert(pitRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
+        matchRows.length > 0 ? supabase.from('match_scouts').upsert(matchRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
+      ]);
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          storage.removeFromSyncQueue(queue.map(r => r.id));
-          lastSyncTime = Date.now();
-          currentStatus = 'success';
-          
-          // Dispatch a custom event for toast notification
-          window.dispatchEvent(new CustomEvent('sync-success'));
-        } else {
-          currentStatus = 'error';
-        }
-      } else {
+      if (pitResult.error || matchResult.error) {
         currentStatus = 'error';
+      } else {
+        storage.removeFromSyncQueue(queue.map(r => r.id));
+        lastSyncTime = Date.now();
+        currentStatus = 'success';
+        window.dispatchEvent(new CustomEvent('sync-success'));
       }
     } catch (error) {
       console.error('Sync failed:', error);

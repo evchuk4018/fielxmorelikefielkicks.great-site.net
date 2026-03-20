@@ -78,10 +78,26 @@ to authenticated
 using (true)
 with check (true);
 
+drop policy if exists "anon_rw_pit_scouts" on public.pit_scouts;
+create policy "anon_rw_pit_scouts"
+on public.pit_scouts
+for all
+to anon
+using (true)
+with check (true);
+
 drop policy if exists "authenticated_rw_match_scouts" on public.match_scouts;
 create policy "authenticated_rw_match_scouts"
 on public.match_scouts
 for all
 to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_match_scouts" on public.match_scouts;
+create policy "anon_rw_match_scouts"
+on public.match_scouts
+for all
+to anon
 using (true)
 with check (true);
