@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { SyncRecord } from '../types';
 
 type RawEntryType = 'pit' | 'match';
+type SearchMode = 'match' | 'team';
 
 type RawEntry = {
   key: string;
@@ -35,6 +36,8 @@ function normalizePayload(value: unknown): unknown {
 
 export function RawData() {
   const [entries, setEntries] = useState<RawEntry[]>([]);
+  const [searchMode, setSearchMode] = useState<SearchMode>('match');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -139,6 +142,21 @@ export function RawData() {
     return { pit, match, total: entries.length };
   }, [entries]);
 
+  const filteredEntries = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return entries;
+    }
+
+    if (searchMode === 'match') {
+      return entries.filter(
+        (entry) => entry.type === 'match' && String(entry.matchNumber ?? '').toLowerCase().includes(query)
+      );
+    }
+
+    return entries.filter((entry) => String(entry.teamNumber ?? '').toLowerCase().includes(query));
+  }, [entries, searchMode, searchQuery]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24 px-4">
       <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
@@ -151,14 +169,38 @@ export function RawData() {
           <span>Pit: {counts.pit}</span>
           <span>Match: {counts.match}</span>
         </div>
+        <div className="mt-4 flex flex-col sm:flex-row gap-3">
+          <select
+            value={searchMode}
+            onChange={(event) => setSearchMode(event.target.value as SearchMode)}
+            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-sm"
+            aria-label="Search mode"
+          >
+            <option value="match">Search by match</option>
+            <option value="team">Search by team</option>
+          </select>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={searchMode === 'match' ? 'Enter match number' : 'Enter team number'}
+            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-sm placeholder:text-slate-500"
+            aria-label={searchMode === 'match' ? 'Search match number' : 'Search team number'}
+          />
+        </div>
+        <div className="mt-2 text-xs text-slate-400">Results: {filteredEntries.length}</div>
       </div>
 
       {entries.length === 0 ? (
         <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-400">
           No pit scouting or match scouting records found yet.
         </div>
+      ) : filteredEntries.length === 0 ? (
+        <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-400">
+          No records match this {searchMode} search.
+        </div>
       ) : (
-        entries.map((entry) => (
+        filteredEntries.map((entry) => (
           <div key={entry.key} className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
             <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
               <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">{entry.type}</span>
