@@ -143,18 +143,18 @@ export function RawData() {
   }, [entries]);
 
   const filteredEntries = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim();
     if (!query) {
       return entries;
     }
 
     if (searchMode === 'match') {
       return entries.filter(
-        (entry) => entry.type === 'match' && String(entry.matchNumber ?? '').toLowerCase().includes(query)
+        (entry) => entry.type === 'match' && entry.matchNumber != null && String(entry.matchNumber) === query
       );
     }
 
-    return entries.filter((entry) => String(entry.teamNumber ?? '').toLowerCase().includes(query));
+    return entries.filter((entry) => entry.teamNumber != null && String(entry.teamNumber) === query);
   }, [entries, searchMode, searchQuery]);
 
   return (
@@ -183,12 +183,14 @@ export function RawData() {
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={searchMode === 'match' ? 'Enter match number' : 'Enter team number'}
+            placeholder={searchMode === 'match' ? 'Enter exact match number' : 'Enter exact team number'}
             className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-sm placeholder:text-slate-500"
             aria-label={searchMode === 'match' ? 'Search match number' : 'Search team number'}
           />
         </div>
-        <div className="mt-2 text-xs text-slate-400">Results: {filteredEntries.length}</div>
+        <div className="mt-2 text-xs text-slate-400" role="status" aria-live="polite">
+          Results: {filteredEntries.length}
+        </div>
       </div>
 
       {entries.length === 0 ? (
