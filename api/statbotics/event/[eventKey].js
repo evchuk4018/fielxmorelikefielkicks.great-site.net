@@ -1,7 +1,8 @@
 function normalizeEventKey(eventKey) {
   if (typeof eventKey !== 'string') return null;
   const normalized = eventKey.trim().toLowerCase();
-  const match = normalized.match(/^\d{4}[a-z0-9]+$/i);
+  // Expected format is year + event code, e.g. 2026paphi.
+  const match = normalized.match(/^\d{4}[a-z0-9]+$/);
   if (!match) return null;
   return normalized;
 }

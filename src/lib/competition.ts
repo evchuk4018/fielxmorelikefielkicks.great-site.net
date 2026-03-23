@@ -56,10 +56,12 @@ export const competition = {
     ]);
 
     const profile: CompetitionProfile = {
-      id: `${normalizedEventKey}-${Date.now()}`,
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${normalizedEventKey}-${Date.now()}`,
       eventKey: normalizedEventKey,
       name: event?.name || event?.short_name || normalizedEventKey.toUpperCase(),
-      info: [event?.year, event?.event_type_string, event?.city, event?.state_prov || event?.country]
+      info: [event?.year, event?.event_type_string, event?.city, event?.state_prov ?? event?.country]
         .filter(Boolean)
         .join(' • ') || 'Competition profile',
       teams,

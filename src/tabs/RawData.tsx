@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
-import { SyncRecord } from '../types';
+import { MatchScoutData, PitScoutData, SyncRecord } from '../types';
 import { MatchDataSection, PitDataSection } from '../components/TeamDataSections';
 
 type RawEntryType = 'pit' | 'match';
@@ -168,8 +168,10 @@ export function RawData() {
     return selectedTeamEntries.find((entry) => entry.type === 'pit') || null;
   }, [selectedTeamEntries]);
 
-  const selectedTeamMatchEntries = useMemo(() => {
-    return selectedTeamEntries.filter((entry) => entry.type === 'match').map((entry) => entry.payload as any);
+  const selectedTeamMatchEntries = useMemo((): MatchScoutData[] => {
+    return selectedTeamEntries
+      .filter((entry) => entry.type === 'match')
+      .map((entry) => entry.payload as MatchScoutData);
   }, [selectedTeamEntries]);
 
   return (
@@ -235,11 +237,11 @@ export function RawData() {
               <div className="space-y-8">
                 <h3 className="text-xl font-bold text-white font-mono">Team {selectedTeamNumber}</h3>
                 {selectedTeamPitEntry ? (
-                  <PitDataSection pitData={selectedTeamPitEntry.payload as any} />
+                  <PitDataSection pitData={selectedTeamPitEntry.payload as PitScoutData} />
                 ) : (
                   <div className="text-sm text-slate-400">No pit scouting record for this team.</div>
                 )}
-                <MatchDataSection records={selectedTeamMatchEntries as any} />
+                <MatchDataSection records={selectedTeamMatchEntries} />
               </div>
             )}
           </div>

@@ -69,13 +69,16 @@ export function PitScouting() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePhotoUpload = (field: 'shooterPhoto' | 'intakePhoto' | 'hopperPhoto' | 'drivetrainPhoto', file?: File) => {
+  const handlePhotoUpload = (photoField: 'shooterPhoto' | 'intakePhoto' | 'hopperPhoto' | 'drivetrainPhoto', file?: File) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        updateField(field, reader.result);
+        updateField(photoField, reader.result);
       }
+    };
+    reader.onerror = () => {
+      showToast('Failed to read photo file');
     };
     reader.readAsDataURL(file);
   };

@@ -3,6 +3,7 @@ import { competition } from '../lib/competition';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { TBAMatch } from '../types';
+import { showToast } from '../components/Toast';
 
 type CountMap = Record<number, number>;
 
@@ -68,8 +69,13 @@ export function MatchView() {
               localCounts[teamNumber] = (localCounts[teamNumber] || 0) + 1;
             }
           });
+        } else {
+          console.error('[MatchView] Failed to load match scouting counts', error);
+          showToast('Could not load remote scouting counts');
         }
-      } catch {
+      } catch (error) {
+        console.error('[MatchView] Failed to query scouting counts', error);
+        showToast('Could not load remote scouting counts');
         // Keep local counts if remote query fails.
       }
 
