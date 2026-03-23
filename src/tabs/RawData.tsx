@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { SyncRecord } from '../types';
+import { MatchDataSection, PitDataSection } from '../components/TeamDataSections';
 
 type RawEntryType = 'pit' | 'match';
-type SearchMode = 'match' | 'team';
 
 type RawEntry = {
   key: string;
@@ -36,8 +36,8 @@ function normalizePayload(value: unknown): unknown {
 
 export function RawData() {
   const [entries, setEntries] = useState<RawEntry[]>([]);
-  const [searchMode, setSearchMode] = useState<SearchMode>('match');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTeamNumber, setSelectedTeamNumber] = useState<number | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -142,27 +142,42 @@ export function RawData() {
     return { pit, match, total: entries.length };
   }, [entries]);
 
-  const filteredEntries = useMemo(() => {
+  const teams = useMemo(() => {
+    const numberSet = new Set<number>();
+    entries.forEach((entry) => {
+      const teamValue = Number(entry.teamNumber);
+      if (Number.isFinite(teamValue)) {
+        numberSet.add(teamValue);
+      }
+    });
+    return Array.from(numberSet).sort((a, b) => a - b);
+  }, [entries]);
+
+  const filteredTeams = useMemo(() => {
     const query = searchQuery.trim();
-    if (!query) {
-      return entries;
-    }
+    if (!query) return teams;
+    return teams.filter((teamNumber) => String(teamNumber).includes(query));
+  }, [teams, searchQuery]);
 
-    if (searchMode === 'match') {
-      return entries.filter(
-        (entry) => entry.type === 'match' && entry.matchNumber != null && String(entry.matchNumber) === query
-      );
-    }
+  const selectedTeamEntries = useMemo(() => {
+    if (selectedTeamNumber == null) return [];
+    return entries.filter((entry) => Number(entry.teamNumber) === selectedTeamNumber);
+  }, [entries, selectedTeamNumber]);
 
-    return entries.filter((entry) => entry.teamNumber != null && String(entry.teamNumber) === query);
-  }, [entries, searchMode, searchQuery]);
+  const selectedTeamPitEntry = useMemo(() => {
+    return selectedTeamEntries.find((entry) => entry.type === 'pit') || null;
+  }, [selectedTeamEntries]);
+
+  const selectedTeamMatchEntries = useMemo(() => {
+    return selectedTeamEntries.filter((entry) => entry.type === 'match').map((entry) => entry.payload as any);
+  }, [selectedTeamEntries]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24 px-4">
       <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
         <h2 className="text-2xl font-bold text-white">Raw Data</h2>
         <p className="text-slate-400 mt-2">
-          Showing all raw pit scouting and match scouting data for all teams.
+          Team-first view for all pit scouting and match scouting records.
         </p>
         <div className="mt-4 text-sm text-slate-300 flex flex-wrap gap-4">
           <span>Total: {counts.total}</span>
@@ -170,26 +185,17 @@ export function RawData() {
           <span>Match: {counts.match}</span>
         </div>
         <div className="mt-4 flex flex-col sm:flex-row gap-3">
-          <select
-            value={searchMode}
-            onChange={(event) => setSearchMode(event.target.value as SearchMode)}
-            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-sm"
-            aria-label="Search mode"
-          >
-            <option value="match">Search by match</option>
-            <option value="team">Search by team</option>
-          </select>
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={searchMode === 'match' ? 'Enter exact match number' : 'Enter exact team number'}
+            placeholder="Filter team number"
             className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-sm placeholder:text-slate-500"
-            aria-label={searchMode === 'match' ? 'Search match number' : 'Search team number'}
+            aria-label="Search team number"
           />
         </div>
         <div className="mt-2 text-xs text-slate-400" role="status" aria-live="polite">
-          Results: {filteredEntries.length}
+          Teams: {filteredTeams.length}
         </div>
       </div>
 
@@ -197,24 +203,47 @@ export function RawData() {
         <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-400">
           No pit scouting or match scouting records found yet.
         </div>
-      ) : filteredEntries.length === 0 ? (
+      ) : filteredTeams.length === 0 ? (
         <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-400">
-          No records match this {searchMode} search.
+          No team records match this search.
         </div>
       ) : (
-        filteredEntries.map((entry) => (
-          <div key={entry.key} className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
-            <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
-              <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">{entry.type}</span>
-              <span className="text-slate-300 font-mono">Team {entry.teamNumber}</span>
-              {entry.type === 'match' && <span className="text-slate-300 font-mono">Match {entry.matchNumber}</span>}
-              <span className="text-slate-500">Source: {entry.source}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 className="text-sm font-semibold text-slate-300 mb-3">Teams</h3>
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+              {filteredTeams.map((teamNumber) => (
+                <button
+                  key={teamNumber}
+                  onClick={() => setSelectedTeamNumber(teamNumber)}
+                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors font-mono ${
+                    selectedTeamNumber === teamNumber
+                      ? 'bg-blue-600/30 border-blue-500 text-white'
+                      : 'bg-slate-900/40 border-slate-700 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  Team {teamNumber}
+                </button>
+              ))}
             </div>
-            <pre className="text-xs text-slate-200 bg-slate-900 border border-slate-700 rounded-xl p-4 overflow-auto">
-              {JSON.stringify(entry.payload, null, 2)}
-            </pre>
           </div>
-        ))
+
+          <div className="lg:col-span-2 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            {selectedTeamNumber == null ? (
+              <div className="text-slate-400">Select a team to view detailed scouting data.</div>
+            ) : (
+              <div className="space-y-8">
+                <h3 className="text-xl font-bold text-white font-mono">Team {selectedTeamNumber}</h3>
+                {selectedTeamPitEntry ? (
+                  <PitDataSection pitData={selectedTeamPitEntry.payload as any} />
+                ) : (
+                  <div className="text-sm text-slate-400">No pit scouting record for this team.</div>
+                )}
+                <MatchDataSection records={selectedTeamMatchEntries as any} />
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

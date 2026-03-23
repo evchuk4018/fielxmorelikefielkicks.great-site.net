@@ -1,426 +1,89 @@
-import React, { useState, useEffect } from 'react';
-import { storage } from '../lib/storage';
-import { MatchScoutData, SyncRecord, TBATeam } from '../types';
-import { scoring } from '../lib/scoring';
-import { tba } from '../lib/tba';
-import { supabase } from '../lib/supabase';
-
-type StrategyMatchData = MatchScoutData & {
-  previousCompRank?: string;
-  autoNotes?: string;
-  importedFrom?: string;
-};
-
-type MatchScoutRow = {
-  data: unknown;
-};
-
-function toFiniteNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return fallback;
-}
-
-function normalizeMatchScoutData(raw: any): StrategyMatchData | null {
-  const teamNumber = toFiniteNumber(raw?.teamNumber, NaN);
-  const matchNumber = toFiniteNumber(raw?.matchNumber, NaN);
-
-  if (!Number.isFinite(teamNumber) || teamNumber <= 0) {
-    return null;
-  }
-
-  return {
-    matchNumber: Number.isFinite(matchNumber) ? matchNumber : -1,
-    teamNumber,
-    allianceColor: raw?.allianceColor === 'Red' || raw?.allianceColor === 'Blue' ? raw.allianceColor : '',
-    leftStartingZone: Boolean(raw?.leftStartingZone),
-    autoFuelScored: toFiniteNumber(raw?.autoFuelScored ?? raw?.autoFuelCount, 0),
-    autoClimbAttempted: Boolean(raw?.autoClimbAttempted),
-    autoClimbResult: raw?.autoClimbResult,
-    teleopFuelScored: toFiniteNumber(raw?.teleopFuelScored, 0),
-    avgBps: toFiniteNumber(raw?.avgBps, 0),
-    shootingConsistency: toFiniteNumber(raw?.shootingConsistency, 3),
-    intakeConsistency: toFiniteNumber(raw?.intakeConsistency, 3),
-    droveOverBump: Boolean(raw?.droveOverBump),
-    droveUnderTrench: Boolean(raw?.droveUnderTrench),
-    playedDefense: Boolean(raw?.playedDefense),
-    defenseEffectiveness: raw?.defenseEffectiveness,
-    defendedAgainst: Boolean(raw?.defendedAgainst),
-    hubScoringStrategy: raw?.hubScoringStrategy || '',
-    endGameClimbResult: raw?.endGameClimbResult || '',
-    climbTimeSeconds: raw?.climbTimeSeconds ?? '',
-    foulsCaused: toFiniteNumber(raw?.foulsCaused, 0),
-    cardReceived: raw?.cardReceived || '',
-    notes: typeof raw?.notes === 'string' && raw.notes.trim() !== '' ? raw.notes : (raw?.autoNotes || ''),
-    previousCompRank: typeof raw?.previousCompRank === 'string' ? raw.previousCompRank : '',
-    autoNotes: typeof raw?.autoNotes === 'string' ? raw.autoNotes : '',
-    importedFrom: typeof raw?.importedFrom === 'string' ? raw.importedFrom : '',
-  };
-}
+import React, { useEffect, useMemo, useState } from 'react';
+import { competition } from '../lib/competition';
+import { statbotics } from '../lib/statbotics';
+import { StatboticsTeamStats } from '../types';
+import { showToast } from '../components/Toast';
 
 export function AllianceStrategy() {
-  const [blueTeams, setBlueTeams] = useState<number[]>([]);
-  const [redTeams, setRedTeams] = useState<number[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState<number | ''>('');
-  const [selectedAlliance, setSelectedAlliance] = useState<'Blue' | 'Red'>('Blue');
-  const [allMatches, setAllMatches] = useState<StrategyMatchData[]>([]);
+  const [eventKey, setEventKey] = useState(competition.getActiveProfile()?.eventKey || '');
+  const [stats, setStats] = useState<StatboticsTeamStats[]>(eventKey ? statbotics.getEventTeamStats(eventKey) : []);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const loadMatches = async () => {
-      const localKeys = storage.getAllKeys().filter(k => k.startsWith('matchScout:'));
-      const localMatches = localKeys
-        .map(k => storage.get<SyncRecord<MatchScoutData>>(k)?.data)
-        .map(normalizeMatchScoutData)
-        .filter(Boolean) as StrategyMatchData[];
-
-      let remoteMatches: StrategyMatchData[] = [];
-
-      const { data, error } = await supabase
-        .from('match_scouts')
-        .select('data');
-
-      if (error) {
-        console.error('[AllianceStrategy] Failed to fetch match_scouts from Supabase', error);
-      } else {
-        remoteMatches = ((data || []) as MatchScoutRow[])
-          .map((row) => normalizeMatchScoutData(row.data))
-          .filter(Boolean) as StrategyMatchData[];
-      }
-
-      const merged = new Map<string, StrategyMatchData>();
-      [...localMatches, ...remoteMatches].forEach((match) => {
-        merged.set(`${match.matchNumber}:${match.teamNumber}`, match);
-      });
-
-      const mergedMatches = Array.from(merged.values());
-      setAllMatches(mergedMatches);
-
-      console.info('[AllianceStrategy] Match data refresh complete', {
-        localCount: localMatches.length,
-        remoteCount: remoteMatches.length,
-        mergedCount: mergedMatches.length,
-        importedCount: mergedMatches.filter((m) => m.matchNumber === -1).length,
-        realMatchCount: mergedMatches.filter((m) => m.matchNumber !== -1).length,
-      });
+    const refreshActive = () => {
+      const activeEventKey = competition.getActiveProfile()?.eventKey || '';
+      setEventKey(activeEventKey);
+      setStats(activeEventKey ? statbotics.getEventTeamStats(activeEventKey) : []);
     };
-
-    loadMatches();
-
-    const handleRefresh = () => {
-      loadMatches();
-    };
-
-    window.addEventListener('sync-success', handleRefresh);
-    window.addEventListener('team-import-success', handleRefresh);
-    window.addEventListener('storage', handleRefresh);
-
-    return () => {
-      window.removeEventListener('sync-success', handleRefresh);
-      window.removeEventListener('team-import-success', handleRefresh);
-      window.removeEventListener('storage', handleRefresh);
-    };
+    window.addEventListener('active-competition-changed', refreshActive);
+    return () => window.removeEventListener('active-competition-changed', refreshActive);
   }, []);
 
-  const tbaTeams: TBATeam[] = tba.getTeams();
-
-  const getTeamStats = (teamNumber: number) => {
-    const matches = allMatches.filter(m => m.teamNumber === teamNumber);
-    const importedRows = matches.filter((m) => m.matchNumber === -1);
-    const realMatches = matches.filter((m) => m.matchNumber !== -1);
-    const statMatches = realMatches.length > 0 ? realMatches : matches;
-    const count = statMatches.length;
-
-    console.debug('[AllianceStrategy] Team lookup', {
-      teamNumber,
-      totalRows: matches.length,
-      importedRows: importedRows.length,
-      realMatches: realMatches.length,
-      sampleTeams: Array.from(new Set(allMatches.map((m) => m.teamNumber))).slice(0, 20),
-    });
-    
-    if (matches.length === 0) return null;
-
-    const totalFuel = statMatches.reduce((sum, m) => sum + scoring.getFuelPoints(m.autoFuelScored, m.teleopFuelScored), 0);
-    const totalAutoFuel = statMatches.reduce((sum, m) => sum + m.autoFuelScored, 0);
-    const totalBps = statMatches.reduce((sum, m) => sum + m.avgBps, 0);
-    const totalShootingConsistency = statMatches.reduce((sum, m) => sum + m.shootingConsistency, 0);
-    
-    const climbSuccesses = statMatches.filter(m => ['Level 1', 'Level 2', 'Level 3'].includes(m.endGameClimbResult)).length;
-    const totalTowerPoints = statMatches.reduce((sum, m) => sum + scoring.getTowerPoints(m.endGameClimbResult, m.autoClimbResult), 0);
-    
-    const climbLevels = statMatches.map(m => m.endGameClimbResult).filter(r => ['Level 1', 'Level 2', 'Level 3'].includes(r));
-    const preferredClimbLevel = climbLevels.length > 0 
-      ? climbLevels.sort((a,b) => climbLevels.filter(v => v===a).length - climbLevels.filter(v => v===b).length).pop() 
-      : 'None';
-
-    const droveOverBump = statMatches.some(m => m.droveOverBump);
-    const droveUnderTrench = statMatches.some(m => m.droveUnderTrench);
-    let traversal = 'Neither';
-    if (droveOverBump && droveUnderTrench) traversal = 'Both';
-    else if (droveOverBump) traversal = 'Bump';
-    else if (droveUnderTrench) traversal = 'Trench';
-
-    const defensePlayed = statMatches.filter(m => m.playedDefense);
-    const defenseRate = defensePlayed.length / count;
-    const avgDefenseEffectiveness = defensePlayed.length > 0 
-      ? defensePlayed.reduce((sum, m) => sum + (m.defenseEffectiveness || 0), 0) / defensePlayed.length 
-      : 0;
-
-    const totalFouls = statMatches.reduce((sum, m) => sum + m.foulsCaused, 0);
-
-    const importedSnapshot = importedRows[0];
-
-    return {
-      teamNumber,
-      nickname: tbaTeams.find(t => t.team_number === teamNumber)?.nickname || 'Unknown',
-      avgFuel: totalFuel / count,
-      avgAutoFuel: totalAutoFuel / count,
-      avgBps: totalBps / count,
-      avgShootingConsistency: totalShootingConsistency / count,
-      climbSuccessRate: climbSuccesses / count,
-      avgTowerPoints: totalTowerPoints / count,
-      preferredClimbLevel,
-      traversal,
-      defenseRate,
-      avgDefenseEffectiveness,
-      avgFouls: totalFouls / count,
-      previousCompRank: importedSnapshot?.previousCompRank || '',
-      notes: matches.filter(m => m.notes).map(m => ({ match: m.matchNumber, note: m.notes })),
-      importedRows: importedRows.length,
-      realMatches: realMatches.length,
+  useEffect(() => {
+    if (!eventKey) return;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const rows = await statbotics.fetchEventTeamStats(eventKey);
+        setStats(rows);
+      } catch (error) {
+        showToast('Failed to load Statbotics data');
+      } finally {
+        setIsLoading(false);
+      }
     };
-  };
+    load();
+  }, [eventKey]);
 
-  const handleAddTeam = () => {
-    if (!selectedTeam) return;
-    if (selectedAlliance === 'Blue' && blueTeams.length < 3 && !blueTeams.includes(selectedTeam)) {
-      setBlueTeams([...blueTeams, selectedTeam]);
-    } else if (selectedAlliance === 'Red' && redTeams.length < 3 && !redTeams.includes(selectedTeam)) {
-      setRedTeams([...redTeams, selectedTeam]);
-    }
-    setSelectedTeam('');
-  };
-
-  const renderTeamCard = (teamNumber: number, alliance: 'Blue' | 'Red') => {
-    const stats = getTeamStats(teamNumber);
-    if (!stats) return (
-      <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl flex items-center justify-center min-h-[400px]">
-        <span className="text-slate-500">No data for {teamNumber}</span>
-      </div>
-    );
-
-    return (
-      <div className={`bg-slate-800/50 p-6 rounded-2xl border shadow-xl space-y-4 ${alliance === 'Blue' ? 'border-blue-500/30' : 'border-red-500/30'}`}>
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-2xl font-bold font-mono text-white">{stats.teamNumber}</h3>
-            <p className="text-sm text-slate-400">{stats.nickname}</p>
-          </div>
-          <button 
-            onClick={() => alliance === 'Blue' ? setBlueTeams(blueTeams.filter(t => t !== teamNumber)) : setRedTeams(redTeams.filter(t => t !== teamNumber))}
-            className="text-slate-500 hover:text-white transition-colors"
-          >
-            Remove
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Rows</span>
-            <span className="font-mono text-lg text-white">{stats.realMatches} real / {stats.importedRows} imported</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Prev Rank</span>
-            <span className="font-mono text-lg text-white">{stats.previousCompRank || 'N/A'}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Avg Fuel</span>
-            <span className="font-mono text-lg text-white">{stats.avgFuel.toFixed(1)}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Avg Auto Fuel</span>
-            <span className="font-mono text-lg text-white">{stats.avgAutoFuel.toFixed(1)}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Avg BPS</span>
-            <span className="font-mono text-lg text-white">{stats.avgBps.toFixed(1)}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Shooting Cons.</span>
-            <span className="font-mono text-lg text-white">{stats.avgShootingConsistency.toFixed(1)}/5</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Climb Rate</span>
-            <span className="font-mono text-lg text-white">{(stats.climbSuccessRate * 100).toFixed(0)}%</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Avg Tower Pts</span>
-            <span className="font-mono text-lg text-white">{stats.avgTowerPoints.toFixed(1)}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Pref. Climb</span>
-            <span className="font-mono text-white">{stats.preferredClimbLevel}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Traversal</span>
-            <span className="font-mono text-white">{stats.traversal}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Defense Rate</span>
-            <span className="font-mono text-white">{(stats.defenseRate * 100).toFixed(0)}%</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-slate-400 block">Def. Effect.</span>
-            <span className="font-mono text-white">{stats.avgDefenseEffectiveness.toFixed(1)}/5</span>
-          </div>
-        </div>
-
-        {stats.notes.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-700">
-            <h4 className="text-sm font-medium text-slate-300 mb-2">Notes</h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-              {stats.notes.map((n, i) => (
-                <div key={i} className="text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
-                  <span className="font-mono text-blue-400 mr-2">Qm{n.match}</span>
-                  {n.note}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderAllianceSummary = (teams: number[], alliance: 'Blue' | 'Red') => {
-    if (teams.length === 0) return null;
-
-    const statsList = teams.map(getTeamStats).filter(Boolean) as NonNullable<ReturnType<typeof getTeamStats>>[];
-    if (statsList.length === 0) return null;
-
-    const combinedFuel = statsList.reduce((sum, s) => sum + s.avgFuel, 0);
-    const combinedTowerPts = statsList.reduce((sum, s) => sum + s.avgTowerPoints, 0);
-    const anyL2L3 = statsList.some(s => s.preferredClimbLevel === 'Level 2' || s.preferredClimbLevel === 'Level 3');
-    const anyDefense = statsList.some(s => s.defenseRate > 0.3);
-
-    let recommendation = '';
-    if (combinedFuel > 200 && !anyL2L3) {
-      recommendation = "Focus on maximizing shooter output and getting one robot to L2 for Traversal RP.";
-    } else if (combinedFuel < 100 && anyL2L3) {
-      recommendation = "Tower-heavy strategy — prioritize climb timing and position.";
-    } else if (anyDefense && combinedFuel > 150) {
-      recommendation = "Strong balanced alliance. Assign one dedicated defender to disrupt opponents while two score.";
-    } else {
-      recommendation = "Focus on consistent fuel scoring to reach Energized RP.";
-    }
-
-    return (
-      <div className={`col-span-full mt-8 bg-slate-800/50 p-6 rounded-2xl border shadow-xl ${alliance === 'Blue' ? 'border-blue-500/50' : 'border-red-500/50'}`}>
-        <h3 className={`text-xl font-bold mb-4 ${alliance === 'Blue' ? 'text-blue-400' : 'text-red-400'}`}>
-          {alliance} Alliance Summary
-        </h3>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-          <div className="space-y-1">
-            <span className="text-sm text-slate-400 block">Combined Avg Fuel</span>
-            <span className="text-2xl font-mono font-bold text-white">{combinedFuel.toFixed(1)}</span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-sm text-slate-400 block">Energized RP (&gt;100)</span>
-            <span className={`text-xl font-bold ${combinedFuel >= 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {combinedFuel >= 100 ? 'Likely' : 'Unlikely'}
-            </span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-sm text-slate-400 block">Supercharged RP (&gt;360)</span>
-            <span className={`text-xl font-bold ${combinedFuel >= 360 ? 'text-emerald-400' : 'text-slate-500'}`}>
-              {combinedFuel >= 360 ? 'Likely' : 'Unlikely'}
-            </span>
-          </div>
-          <div className="space-y-1">
-            <span className="text-sm text-slate-400 block">Traversal RP (&gt;50)</span>
-            <span className={`text-xl font-bold ${combinedTowerPts >= 50 ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {combinedTowerPts >= 50 ? 'Likely' : 'Unlikely'}
-            </span>
-          </div>
-        </div>
-
-        <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-          <h4 className="text-sm font-medium text-slate-300 mb-2">Strategy Recommendation</h4>
-          <p className="text-white">{recommendation}</p>
-        </div>
-      </div>
-    );
-  };
+  const sortedStats = useMemo(
+    () => [...stats].sort((a, b) => (b.epa ?? -999) - (a.epa ?? -999)),
+    [stats]
+  );
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-24 px-4">
-      <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col md:flex-row gap-4 items-end">
-        <div className="flex-1 space-y-2 w-full">
-          <label className="block text-sm font-medium text-slate-300">Select Team</label>
-          <input
-            type="number"
-            value={selectedTeam}
-            onChange={(e) => setSelectedTeam(e.target.value ? parseInt(e.target.value) : '')}
-            className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 font-mono text-xl"
-            placeholder="Team Number"
-          />
-        </div>
-        <div className="flex-1 space-y-2 w-full">
-          <label className="block text-sm font-medium text-slate-300">Alliance</label>
-          <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-700">
-            <button
-              onClick={() => setSelectedAlliance('Blue')}
-              className={`flex-1 py-2 px-4 text-sm font-medium rounded-lg transition-colors ${
-                selectedAlliance === 'Blue' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Blue
-            </button>
-            <button
-              onClick={() => setSelectedAlliance('Red')}
-              className={`flex-1 py-2 px-4 text-sm font-medium rounded-lg transition-colors ${
-                selectedAlliance === 'Red' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Red
-            </button>
-          </div>
-        </div>
-        <button
-          onClick={handleAddTeam}
-          disabled={!selectedTeam}
-          className="w-full md:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium rounded-xl transition-colors h-[52px]"
-        >
-          Add Team
-        </button>
+    <div className="max-w-7xl mx-auto space-y-6 pb-24 px-4">
+      <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
+        <h2 className="text-2xl font-bold text-white">Statbotics Team Stats</h2>
+        {eventKey ? (
+          <p className="text-slate-400 mt-2">
+            Active event: <span className="font-mono text-blue-300">{eventKey.toUpperCase()}</span>
+          </p>
+        ) : (
+          <p className="text-slate-400 mt-2">Set an active competition profile on Home to load Statbotics data.</p>
+        )}
       </div>
 
-      {blueTeams.length > 0 && (
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-blue-400">Blue Alliance</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {blueTeams.map(t => renderTeamCard(t, 'Blue'))}
-            {renderAllianceSummary(blueTeams, 'Blue')}
-          </div>
-        </div>
-      )}
-
-      {redTeams.length > 0 && (
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-red-400">Red Alliance</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {redTeams.map(t => renderTeamCard(t, 'Red'))}
-            {renderAllianceSummary(redTeams, 'Red')}
+      {isLoading ? (
+        <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-300">Loading Statbotics data…</div>
+      ) : sortedStats.length === 0 ? (
+        <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-300">No Statbotics data available.</div>
+      ) : (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="bg-slate-900/70 text-slate-400">
+                <tr>
+                  <th className="px-5 py-4">Team</th>
+                  <th className="px-5 py-4">EPA</th>
+                  <th className="px-5 py-4">Average Points</th>
+                  <th className="px-5 py-4">Predicted Win Rate</th>
+                  <th className="px-5 py-4">Record</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {sortedStats.map((team) => (
+                  <tr key={team.teamNumber}>
+                    <td className="px-5 py-3 font-mono text-white">{team.teamNumber}</td>
+                    <td className="px-5 py-3">{team.epa == null ? 'N/A' : team.epa.toFixed(2)}</td>
+                    <td className="px-5 py-3">{team.avgPoints == null ? 'N/A' : team.avgPoints.toFixed(1)}</td>
+                    <td className="px-5 py-3">
+                      {team.predictedWinRate == null ? 'N/A' : `${(team.predictedWinRate * 100).toFixed(0)}%`}
+                    </td>
+                    <td className="px-5 py-3">{team.record}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

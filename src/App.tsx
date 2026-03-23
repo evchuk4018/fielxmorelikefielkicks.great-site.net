@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { Home } from './tabs/Home';
 import { PitScouting } from './tabs/PitScouting';
-import { MatchScouting } from './tabs/MatchScouting';
-import { TeamLookup } from './tabs/TeamLookup';
 import { AllianceStrategy } from './tabs/AllianceStrategy';
+import { MatchView } from './tabs/MatchView';
 import { RawData } from './tabs/RawData';
+import { TeamReview } from './tabs/TeamReview';
 import { SyncIndicator } from './components/SyncIndicator';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastProvider } from './components/Toast';
 import { syncManager } from './lib/sync';
-import { Settings, ClipboardList, Activity, Users, Target, Database } from 'lucide-react';
+import { Settings, ClipboardList, Activity, Target, Database, House, UserRoundSearch } from 'lucide-react';
 
-type Tab = 'pit' | 'match' | 'lookup' | 'strategy' | 'raw';
+type Tab = 'home' | 'pit' | 'match' | 'strategy' | 'raw' | 'review';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('match');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -23,12 +24,13 @@ export default function App() {
 
   const renderTab = () => {
     switch (activeTab) {
+      case 'home': return <Home onOpenPit={() => setActiveTab('pit')} />;
       case 'pit': return <PitScouting />;
-      case 'match': return <MatchScouting />;
-      case 'lookup': return <TeamLookup />;
+      case 'match': return <MatchView />;
       case 'strategy': return <AllianceStrategy />;
       case 'raw': return <RawData />;
-      default: return <MatchScouting />;
+      case 'review': return <TeamReview />;
+      default: return <Home onOpenPit={() => setActiveTab('pit')} />;
     }
   };
 
@@ -44,6 +46,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
+                activeTab === 'home' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <House className="w-4 h-4" />
+              <span className="hidden md:block">Home</span>
+            </button>
             <button
               onClick={() => setActiveTab('pit')}
               className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
@@ -63,22 +74,13 @@ export default function App() {
               <span className="hidden md:block">Match</span>
             </button>
             <button
-              onClick={() => setActiveTab('lookup')}
-              className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
-                activeTab === 'lookup' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span className="hidden md:block">Teams</span>
-            </button>
-            <button
               onClick={() => setActiveTab('strategy')}
               className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'strategy' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
               <Target className="w-4 h-4" />
-              <span className="hidden md:block">Strategy</span>
+              <span className="hidden md:block">Stats</span>
             </button>
             <button
               onClick={() => setActiveTab('raw')}
@@ -88,6 +90,15 @@ export default function App() {
             >
               <Database className="w-4 h-4" />
               <span className="hidden md:block">Raw</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('review')}
+              className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
+                activeTab === 'review' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <UserRoundSearch className="w-4 h-4" />
+              <span className="hidden md:block">Review</span>
             </button>
           </div>
 

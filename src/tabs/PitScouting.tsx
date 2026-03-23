@@ -23,6 +23,10 @@ const INITIAL_STATE: PitScoutData = {
   shooterType: '',
   hasTurret: false,
   canPlayDefense: false,
+  shooterPhoto: '',
+  intakePhoto: '',
+  hopperPhoto: '',
+  drivetrainPhoto: '',
   notes: ''
 };
 
@@ -63,6 +67,17 @@ export function PitScouting() {
     setData(INITIAL_STATE);
     showToast(`Saved pit scouting for team ${data.teamNumber}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePhotoUpload = (field: 'shooterPhoto' | 'intakePhoto' | 'hopperPhoto' | 'drivetrainPhoto', file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        updateField(field, reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -235,6 +250,32 @@ export function PitScouting() {
             onChange={(e) => updateField('notes', e.target.value)}
             className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 min-h-[120px]"
           />
+        </div>
+      </div>
+
+      <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-6">
+        <h2 className="text-2xl font-bold text-white mb-4">Pit Photos</h2>
+        <p className="text-sm text-slate-400">Upload photos for Shooter, Intake, Hopper, and Drivetrain.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {([
+            { label: 'Shooter', field: 'shooterPhoto' as const, value: data.shooterPhoto },
+            { label: 'Intake', field: 'intakePhoto' as const, value: data.intakePhoto },
+            { label: 'Hopper', field: 'hopperPhoto' as const, value: data.hopperPhoto },
+            { label: 'Drivetrain', field: 'drivetrainPhoto' as const, value: data.drivetrainPhoto },
+          ]).map((slot) => (
+            <div key={slot.field} className="p-4 bg-slate-900/50 border border-slate-700 rounded-xl space-y-3">
+              <label className="block text-sm font-medium text-slate-300">{slot.label}</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handlePhotoUpload(slot.field, e.target.files?.[0])}
+                className="w-full text-xs text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white"
+              />
+              {slot.value && (
+                <img src={slot.value} alt={`${slot.label} upload`} className="w-full h-36 object-cover rounded-lg border border-slate-700" />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

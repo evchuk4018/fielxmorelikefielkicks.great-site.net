@@ -29,6 +29,10 @@ export interface PitScoutData {
   hasTurret: boolean;
   canPlayDefense: boolean;
   defenseStyle?: string;
+  shooterPhoto?: string;
+  intakePhoto?: string;
+  hopperPhoto?: string;
+  drivetrainPhoto?: string;
   notes: string;
 }
 
@@ -98,4 +102,22 @@ export interface TeamImportData {
   previousCompRank: string;
   autoFuelCount: number | null;
   autoNotes: string;
+}
+
+export interface CompetitionProfile {
+  id: string;
+  eventKey: string;
+  name: string;
+  info: string;
+  teams: TBATeam[];
+  matches: TBAMatch[];
+  createdAt: number;
+}
+
+export interface StatboticsTeamStats {
+  teamNumber: number;
+  epa: number | null;
+  avgPoints: number | null;
+  predictedWinRate: number | null;
+  record: string;
 }
