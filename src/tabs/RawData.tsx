@@ -391,7 +391,7 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
       setYearError(null);
 
       try {
-        const response = await fetch(`/api/statbotics/team_matches?team=${selectedTeam}&event=${encodeURIComponent(eventKey)}`);
+        const response = await fetch(`/api/statbotics/team_matches?team=${selectedTeam}&eventKey=${encodeURIComponent(eventKey)}`);
         if (!response.ok) {
           throw new Error(`Statbotics team matches request failed (${response.status})`);
         }
