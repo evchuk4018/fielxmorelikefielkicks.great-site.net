@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "node -e \"const fs=require('fs'); ['dist'].forEach(d=>{if(fs.existsSync(d)) fs.rmSync(d,{recursive:true,force:true});});\"",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cleanup:legacy-pit-photos:dry": "node scripts/cleanup-legacy-pit-photos.mjs",
+    "cleanup:legacy-pit-photos": "node scripts/cleanup-legacy-pit-photos.mjs --execute"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -16,6 +18,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "clsx": "^2.1.1",
+    "face-api.js": "^0.22.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.0",

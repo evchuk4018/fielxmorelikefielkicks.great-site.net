@@ -8,9 +8,20 @@ interface SettingsModalProps {
   onClose: () => void;
   activeProfile: CompetitionProfile | null;
   onBackToEvents: () => void;
+  onTrainFaceId: () => void;
+  onTestFaceId: () => void;
+  isFaceIdBusy?: boolean;
 }
 
-export function SettingsModal({ isOpen, onClose, activeProfile, onBackToEvents }: SettingsModalProps) {
+export function SettingsModal({
+  isOpen,
+  onClose,
+  activeProfile,
+  onBackToEvents,
+  onTrainFaceId,
+  onTestFaceId,
+  isFaceIdBusy,
+}: SettingsModalProps) {
   const [activeEventKey, setActiveEventKey] = useState('');
 
   useEffect(() => {
@@ -57,6 +68,29 @@ export function SettingsModal({ isOpen, onClose, activeProfile, onBackToEvents }
                   <p>{activeProfile.teamCount} teams cached</p>
                 </div>
               )}
+
+              <div className="space-y-3 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
+                <p className="text-sm font-semibold text-white">Face ID</p>
+                <p className="text-xs text-slate-400">
+                  Train from short guided video, then run a test scan against enrolled faces.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={onTrainFaceId}
+                    disabled={Boolean(isFaceIdBusy)}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Train Face ID
+                  </button>
+                  <button
+                    onClick={onTestFaceId}
+                    disabled={Boolean(isFaceIdBusy)}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Test Face ID
+                  </button>
+                </div>
+              </div>
 
               <p className="text-xs text-slate-400">
                 Competition profiles are managed on the Events page. Supabase, TBA, and Gemini keys are loaded from Vercel environment variables.

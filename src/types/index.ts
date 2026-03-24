@@ -132,3 +132,35 @@ export interface CompetitionProfile {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface FaceIdEnrollmentPayload {
+  personName: string;
+  embedding: number[];
+  photoUrls: string[];
+  embeddingModel?: string;
+  acceptedFrames?: number;
+  qualityScore?: number;
+  eventKey?: string | null;
+  profileId?: string | null;
+}
+
+export interface FaceIdEnrollmentResponse {
+  id: string;
+  personName: string;
+  photoCount: number;
+  embeddingModel: string;
+}
+
+export interface FaceIdVerifyPayload {
+  embedding: number[];
+  threshold?: number;
+}
+
+export interface FaceIdVerifyResponse {
+  matched: boolean;
+  name: string | null;
+  enrollmentId: string | null;
+  distance: number | null;
+  checked: number;
+  threshold: number;
+}

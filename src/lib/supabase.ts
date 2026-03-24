@@ -14,6 +14,7 @@ if (!supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const PIT_SCOUT_PHOTO_BUCKET = 'pit-scout-photos';
+export const FACE_ID_SNAPSHOT_BUCKET = 'face-id-snapshots';
 
 type UploadedPitPhoto = {
   publicUrl: string;
@@ -90,4 +91,33 @@ export async function deletePitScoutPhotoByUrl(publicUrl: string): Promise<void>
   if (error) {
     throw new Error(error.message || 'Failed to delete pit photo.');
   }
+}
+
+export async function uploadFaceIdSnapshot(scopeKey: string, personName: string, file: File): Promise<UploadedPitPhoto> {
+  const normalizedScope = scopeKey.trim().toLowerCase() || 'global';
+  const normalizedName = personName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown';
+
+  const ext = getFileExtension(file.name);
+  const path = `faceid/${normalizedScope}/${normalizedName}/${Date.now()}-${randomSuffix()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage.from(FACE_ID_SNAPSHOT_BUCKET).upload(path, file, {
+    upsert: false,
+    cacheControl: '3600',
+    contentType: file.type || undefined,
+  });
+
+  if (uploadError) {
+    throw new Error(uploadError.message || 'Failed to upload face snapshot.');
+  }
+
+  const { data } = supabase.storage.from(FACE_ID_SNAPSHOT_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    throw new Error('Failed to resolve a public URL for the uploaded face snapshot.');
+  }
+
+  return { publicUrl: data.publicUrl, path };
 }

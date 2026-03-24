@@ -6,8 +6,10 @@ import { RawData } from './tabs/RawData';
 import { EventMatchScouting } from './tabs/EventMatchScouting';
 import { SyncIndicator } from './components/SyncIndicator';
 import { SettingsModal } from './components/SettingsModal';
+import { FaceIdCaptureModal } from './components/FaceIdCaptureModal';
 import { ToastProvider, showToast } from './components/Toast';
 import { syncManager } from './lib/sync';
+import { faceid } from './lib/faceid';
 import {
   getProfiles,
   getActiveProfile,
@@ -15,11 +17,13 @@ import {
   setActiveProfileId,
 } from './lib/competitionProfiles';
 import { tba } from './lib/tba';
+import { uploadFaceIdSnapshot } from './lib/supabase';
 import { CompetitionProfile, TBAEvent } from './types';
 import { Settings, ClipboardList, Target, Database, Clipboard } from 'lucide-react';
 
 type Location = 'home' | 'event';
 type EventTab = 'pit' | 'match' | 'strategy' | 'raw';
+type FaceIdMode = 'train' | 'test';
 
 export default function App() {
   const [location, setLocation] = useState<Location>('home');
@@ -28,6 +32,8 @@ export default function App() {
   const [profiles, setProfiles] = useState<CompetitionProfile[]>([]);
   const [activeProfile, setActiveProfile] = useState<CompetitionProfile | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [faceIdMode, setFaceIdMode] = useState<FaceIdMode | null>(null);
+  const [isFaceIdBusy, setIsFaceIdBusy] = useState(false);
 
   useEffect(() => {
     syncManager.start();
@@ -123,6 +129,57 @@ export default function App() {
     }
   }, [activeProfile, location]);
 
+  const handleFaceIdComplete = async (payload: {
+    mode: FaceIdMode;
+    personName: string;
+    embedding: number[];
+    acceptedFrames: number;
+    qualityScore: number;
+    snapshots: Blob[];
+  }) => {
+    setIsFaceIdBusy(true);
+    try {
+      if (payload.mode === 'train') {
+        const scopeKey = activeProfile?.eventKey || 'global';
+        const snapshotBlobs = payload.snapshots.slice(0, 5);
+        const uploadTasks = snapshotBlobs.map((blob, index) => {
+          const file = new File([blob], `faceid-${Date.now()}-${index + 1}.jpg`, { type: 'image/jpeg' });
+          return uploadFaceIdSnapshot(scopeKey, payload.personName, file);
+        });
+
+        const uploads = await Promise.all(uploadTasks);
+        const photoUrls = uploads.map((entry) => entry.publicUrl);
+
+        const enrollment = await faceid.train({
+          personName: payload.personName,
+          embedding: payload.embedding,
+          photoUrls,
+          embeddingModel: 'face-api.js@tiny-face-detector-v1',
+          acceptedFrames: payload.acceptedFrames,
+          qualityScore: payload.qualityScore,
+          eventKey: activeProfile?.eventKey || null,
+          profileId: activeProfile?.id || null,
+        });
+
+        showToast(`Face ID trained for ${enrollment.personName}`);
+      } else {
+        const result = await faceid.verify({
+          embedding: payload.embedding,
+          threshold: 0.55,
+        });
+
+        if (result.matched && result.name) {
+          showToast(`Match found: ${result.name}`);
+        } else {
+          showToast('No matching face found');
+        }
+      }
+    } finally {
+      setIsFaceIdBusy(false);
+      setFaceIdMode(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-blue-500/30">
       <nav className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shadow-sm">
@@ -212,7 +269,25 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         activeProfile={activeProfile}
         onBackToEvents={handleGoHome}
+        onTrainFaceId={() => {
+          setIsSettingsOpen(false);
+          setFaceIdMode('train');
+        }}
+        onTestFaceId={() => {
+          setIsSettingsOpen(false);
+          setFaceIdMode('test');
+        }}
+        isFaceIdBusy={isFaceIdBusy}
       />
+
+      {faceIdMode && (
+        <FaceIdCaptureModal
+          isOpen={Boolean(faceIdMode)}
+          mode={faceIdMode}
+          onClose={() => setFaceIdMode(null)}
+          onComplete={handleFaceIdComplete}
+        />
+      )}
       <ToastProvider />
     </div>
   );
