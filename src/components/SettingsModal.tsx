@@ -8,9 +8,10 @@ interface SettingsModalProps {
   onClose: () => void;
   activeProfile: CompetitionProfile | null;
   onBackToEvents: () => void;
-  onTrainFaceId: () => void;
-  onTestFaceId: () => void;
-  isFaceIdBusy?: boolean;
+  onOpenLoadProfileFlow: () => void;
+  onSignOutUserProfile: () => void;
+  signedInUserProfile: { name: string; authType: 'password' | 'faceid' } | null;
+  isProfileActionBusy?: boolean;
 }
 
 export function SettingsModal({
@@ -18,9 +19,10 @@ export function SettingsModal({
   onClose,
   activeProfile,
   onBackToEvents,
-  onTrainFaceId,
-  onTestFaceId,
-  isFaceIdBusy,
+  onOpenLoadProfileFlow,
+  onSignOutUserProfile,
+  signedInUserProfile,
+  isProfileActionBusy,
 }: SettingsModalProps) {
   const [activeEventKey, setActiveEventKey] = useState('');
 
@@ -70,26 +72,39 @@ export function SettingsModal({
               )}
 
               <div className="space-y-3 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
-                <p className="text-sm font-semibold text-white">Face ID</p>
+                <p className="text-sm font-semibold text-white">Load Profile</p>
                 <p className="text-xs text-slate-400">
-                  Train from short guided video, then run a test scan against enrolled faces.
+                  Create a new admin-only profile or load an existing profile with password or Face ID.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   <button
-                    onClick={onTrainFaceId}
-                    disabled={Boolean(isFaceIdBusy)}
+                    onClick={onOpenLoadProfileFlow}
+                    disabled={Boolean(isProfileActionBusy)}
                     className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Train Face ID
-                  </button>
-                  <button
-                    onClick={onTestFaceId}
-                    disabled={Boolean(isFaceIdBusy)}
-                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Test Face ID
+                    Load Profile
                   </button>
                 </div>
+              </div>
+
+              <div className="space-y-2 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
+                <p className="text-sm font-semibold text-white">Signed-in User</p>
+                {signedInUserProfile ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-white font-semibold">{signedInUserProfile.name}</p>
+                      <p className="text-xs text-slate-400 capitalize">{signedInUserProfile.authType} profile</p>
+                    </div>
+                    <button
+                      onClick={onSignOutUserProfile}
+                      className="px-3 py-2 border border-slate-600 hover:border-slate-400 text-slate-200 rounded-xl text-sm transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">Signed out</p>
+                )}
               </div>
 
               <p className="text-xs text-slate-400">
