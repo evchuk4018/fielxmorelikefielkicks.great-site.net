@@ -106,7 +106,7 @@ export default function App() {
       case 'pit':
         return <PitScouting />;
       case 'strategy':
-        return <AllianceStrategy eventKey={activeProfile?.eventKey || ''} />;
+        return <AllianceStrategy eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       case 'raw':
         return <RawData eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       default:

@@ -401,9 +401,11 @@ function SectionCard({ title, children }: SectionCardProps) {
 type RawDataProps = {
   eventKey: string;
   profileId: string | null;
+  embeddedTeamNumber?: number | null;
+  hideTeamList?: boolean;
 };
 
-export function RawData({ eventKey, profileId }: RawDataProps) {
+export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTeamList = false }: RawDataProps) {
   const [entries, setEntries] = useState<RawEntry[]>([]);
   const [eventTeams, setEventTeams] = useState<EventTeam[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
@@ -419,6 +421,12 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
     teleop_points: true,
     endgame_points: true,
   });
+
+  useEffect(() => {
+    if (embeddedTeamNumber && Number.isInteger(embeddedTeamNumber) && embeddedTeamNumber > 0) {
+      setSelectedTeam(embeddedTeamNumber);
+    }
+  }, [embeddedTeamNumber]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -569,10 +577,13 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
         if (!cancelled) {
           setEventTeams(list);
           if (list.length === 0) {
-            setSelectedTeam(null);
+            setSelectedTeam(embeddedTeamNumber && embeddedTeamNumber > 0 ? embeddedTeamNumber : null);
             setTeamsError('No teams found for this event.');
           } else {
             setSelectedTeam((prev) => {
+              if (embeddedTeamNumber && list.some((team) => team.teamNumber === embeddedTeamNumber)) {
+                return embeddedTeamNumber;
+              }
               if (prev && list.some((team) => team.teamNumber === prev)) {
                 return prev;
               }
@@ -598,7 +609,7 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
     return () => {
       cancelled = true;
     };
-  }, [eventKey, profileId]);
+  }, [embeddedTeamNumber, eventKey, profileId]);
 
   useEffect(() => {
     if (!selectedTeam || !eventKey) {
@@ -688,6 +699,22 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
     () => eventTeams.find((team) => team.teamNumber === selectedTeam) || null,
     [eventTeams, selectedTeam],
   );
+
+  const selectedTeamDisplay = useMemo(() => {
+    if (selectedTeamEntry) {
+      return selectedTeamEntry;
+    }
+
+    if (!selectedTeam) {
+      return null;
+    }
+
+    return {
+      teamNumber: selectedTeam,
+      nickname: `Team ${selectedTeam}`,
+      stats: null,
+    };
+  }, [selectedTeam, selectedTeamEntry]);
 
   const selectedTeamScouting = useMemo(() => {
     if (!selectedTeam) {
@@ -782,8 +809,9 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 shadow-xl lg:col-span-1">
+      <div className={`grid grid-cols-1 gap-6 ${hideTeamList ? '' : 'lg:grid-cols-3'}`}>
+        {!hideTeamList && (
+          <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 shadow-xl lg:col-span-1">
           <label className="block text-sm font-medium text-slate-300 mb-2">Search Team</label>
           <input
             type="text"
@@ -823,41 +851,42 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
             })}
           </div>
         </div>
+        )}
 
-        <div className="space-y-6 lg:col-span-2">
-          {!selectedTeamEntry ? (
+        <div className={`space-y-6 ${hideTeamList ? '' : 'lg:col-span-2'}`}>
+          {!selectedTeamDisplay ? (
             <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl text-slate-400">
               Select a team to view EPA and scouting details.
             </div>
           ) : (
             <>
               <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                <h3 className="text-xl font-bold text-white">Team {selectedTeamEntry.teamNumber}</h3>
-                <p className="text-slate-400 mt-1">{selectedTeamEntry.nickname}</p>
+                <h3 className="text-xl font-bold text-white">Team {selectedTeamDisplay.teamNumber}</h3>
+                <p className="text-slate-400 mt-1">{selectedTeamDisplay.nickname}</p>
 
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3">
                     <p className="text-xs text-slate-400">Total EPA (event)</p>
                     <p className="text-lg font-mono text-white">
-                      {selectedTeamEntry.stats?.epa?.total_points?.toFixed?.(2) ?? 'N/A'}
+                      {selectedTeamDisplay.stats?.epa?.total_points?.toFixed?.(2) ?? 'N/A'}
                     </p>
                   </div>
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3">
                     <p className="text-xs text-slate-400">Auto</p>
                     <p className="text-lg font-mono text-white">
-                      {selectedTeamEntry.stats?.epa?.auto_points?.toFixed?.(2) ?? 'N/A'}
+                      {selectedTeamDisplay.stats?.epa?.auto_points?.toFixed?.(2) ?? 'N/A'}
                     </p>
                   </div>
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3">
                     <p className="text-xs text-slate-400">Teleop</p>
                     <p className="text-lg font-mono text-white">
-                      {selectedTeamEntry.stats?.epa?.teleop_points?.toFixed?.(2) ?? 'N/A'}
+                      {selectedTeamDisplay.stats?.epa?.teleop_points?.toFixed?.(2) ?? 'N/A'}
                     </p>
                   </div>
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3">
                     <p className="text-xs text-slate-400">Endgame</p>
                     <p className="text-lg font-mono text-white">
-                      {selectedTeamEntry.stats?.epa?.endgame_points?.toFixed?.(2) ?? 'N/A'}
+                      {selectedTeamDisplay.stats?.epa?.endgame_points?.toFixed?.(2) ?? 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -938,7 +967,7 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
               <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
                 <h3 className="text-xl font-bold text-white">Scouting Data</h3>
                 <p className="text-slate-400 mt-1">
-                  Showing all saved scouting records for team {selectedTeamEntry.teamNumber}.
+                  Showing all saved scouting records for team {selectedTeamDisplay.teamNumber}.
                 </p>
 
                 <div className="mt-4 text-sm text-slate-300 flex flex-wrap gap-4">

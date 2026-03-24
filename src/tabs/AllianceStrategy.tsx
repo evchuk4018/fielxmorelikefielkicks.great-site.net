@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { RawData } from './RawData';
 
 type LockedAlliance = 'blue' | 'red';
 
@@ -189,13 +190,15 @@ async function fetchTeamSeasonEPA(teamNumber: number, year: number): Promise<Tea
 
 type AllianceStrategyProps = {
   eventKey: string;
+  profileId: string | null;
 };
 
-export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
+export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps) {
   const [lockedAlliance, setLockedAlliance] = useState<LockedAlliance>('blue');
   const [blueInputs, setBlueInputs] = useState<string[]>(['', '', '']);
   const [redInputs, setRedInputs] = useState<string[]>(['', '', '']);
   const [teamStates, setTeamStates] = useState<Record<number, TeamFetchState>>({});
+  const [popupTeamNumber, setPopupTeamNumber] = useState<number | null>(null);
 
   const eventYear = useMemo(() => parseEventYear(eventKey), [eventKey]);
   const teamStatesRef = useRef(teamStates);
@@ -325,6 +328,25 @@ export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
   const blueTotals = getAllianceTotals(blueTeams);
   const redTotals = getAllianceTotals(redTeams);
 
+  const closeTeamPopup = () => {
+    setPopupTeamNumber(null);
+  };
+
+  useEffect(() => {
+    if (!popupTeamNumber) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeTeamPopup();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [popupTeamNumber]);
+
   const renderTeamSlot = (alliance: LockedAlliance, slotIndex: number) => {
     const isLockedSlot = alliance === lockedAlliance && slotIndex === 0;
     const isBlue = alliance === 'blue';
@@ -345,9 +367,23 @@ export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
 
     const teamState = teamNumber ? teamStates[teamNumber] : null;
     const teamData = teamState?.status === 'ready' ? teamState.data : null;
+    const isClickable = teamNumber !== null;
 
     return (
-      <div key={`${alliance}-${slotIndex}`} className={`rounded-2xl border bg-slate-800/50 p-4 shadow-xl ${borderClass}`}>
+      <div
+        key={`${alliance}-${slotIndex}`}
+        onClick={() => {
+          if (!teamNumber) {
+            return;
+          }
+          setPopupTeamNumber(teamNumber);
+        }}
+        className={`rounded-2xl border bg-slate-800/50 p-4 shadow-xl transition-colors ${borderClass} ${
+          isClickable
+            ? 'cursor-pointer hover:bg-slate-800/80 hover:border-slate-300/60'
+            : ''
+        }`}
+      >
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs uppercase tracking-wide text-slate-400">{alliance} slot {slotIndex + 1}</span>
           {isLockedSlot && <span className="text-[11px] px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300">Locked</span>}
@@ -362,6 +398,7 @@ export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
             type="text"
             value={inputValue}
             onChange={(event) => updateTeamInput(alliance, inputIndex, event.target.value)}
+            onClick={(event) => event.stopPropagation()}
             className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Team #"
             inputMode="numeric"
@@ -377,6 +414,7 @@ export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
               {teamData.teamName} | Total {teamData.total.toFixed(1)}
             </span>
           )}
+          {teamNumber && <div className="mt-1 text-slate-500">Click to open full team data</div>}
         </div>
       </div>
     );
@@ -504,6 +542,51 @@ export function AllianceStrategy({ eventKey }: AllianceStrategyProps) {
           </div>
         </div>
       </div>
+
+      {popupTeamNumber && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-3 sm:p-6" onClick={closeTeamPopup}>
+          <div
+            className="h-full max-w-7xl mx-auto overflow-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Team {popupTeamNumber} Data</h3>
+                <p className="text-xs text-slate-400">Same live data and scouting detail shown in Raw Data</p>
+              </div>
+              <button
+                onClick={closeTeamPopup}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-3 sm:p-4">
+              <RawData
+                eventKey={eventKey}
+                profileId={profileId}
+                embeddedTeamNumber={popupTeamNumber}
+                hideTeamList
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
