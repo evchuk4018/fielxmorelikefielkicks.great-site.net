@@ -1088,53 +1088,6 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                                     </div>
                                   </div>
                                 )}
-
-                                <div className="space-y-3">
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Auton Notes from Match Tab</p>
-                                    {selectedTeamMatchNotes.autonNotes.length === 0 ? (
-                                      <p className="text-sm text-slate-500">No auton notes entered.</p>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {selectedTeamMatchNotes.autonNotes.map((note, index) => (
-                                          <p key={`auton-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                            {note}
-                                          </p>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Defense Notes from Match Tab</p>
-                                    {selectedTeamMatchNotes.defenseNotes.length === 0 ? (
-                                      <p className="text-sm text-slate-500">No defense notes entered.</p>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {selectedTeamMatchNotes.defenseNotes.map((note, index) => (
-                                          <p key={`defense-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                            {note}
-                                          </p>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">General Notes from Match Tab</p>
-                                    {selectedTeamMatchNotes.generalNotes.length === 0 ? (
-                                      <p className="text-sm text-slate-500">No general notes entered.</p>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {selectedTeamMatchNotes.generalNotes.map((note, index) => (
-                                          <p key={`general-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                            {note}
-                                          </p>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
                               </div>
                             </SectionCard>
 
@@ -1194,55 +1147,6 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                             </div>
                           </div>
                         )}
-                      </SectionCard>
-
-                      <SectionCard title="Source Notes from Match Tab">
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Auton Notes</p>
-                            {selectedTeamMatchNotes.autonNotes.length === 0 ? (
-                              <p className="text-sm text-slate-500">No auton notes entered.</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {selectedTeamMatchNotes.autonNotes.map((note, index) => (
-                                  <p key={`auton-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                    {note}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Defense Notes</p>
-                            {selectedTeamMatchNotes.defenseNotes.length === 0 ? (
-                              <p className="text-sm text-slate-500">No defense notes entered.</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {selectedTeamMatchNotes.defenseNotes.map((note, index) => (
-                                  <p key={`defense-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                    {note}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">General Notes</p>
-                            {selectedTeamMatchNotes.generalNotes.length === 0 ? (
-                              <p className="text-sm text-slate-500">No general notes entered.</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {selectedTeamMatchNotes.generalNotes.map((note, index) => (
-                                  <p key={`general-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                    {note}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
                       </SectionCard>
                     </div>
                   )}
