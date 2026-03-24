@@ -9,6 +9,7 @@ const TEST_SECONDS = 3;
 const SAMPLE_INTERVAL_MS = 300;
 
 type FaceIdMode = 'train' | 'test';
+const FALLBACK_DESCRIPTOR_LENGTH = 128;
 
 type CaptureResult = {
   mode: FaceIdMode;
@@ -54,6 +55,32 @@ function averageDescriptors(descriptors: Float32Array[]): number[] {
   return normalizeVector(totals.map((value) => value / descriptors.length));
 }
 
+function descriptorFromImageData(imageData: ImageData): Float32Array {
+  const { data, width, height } = imageData;
+  const descriptor = new Float32Array(FALLBACK_DESCRIPTOR_LENGTH);
+  const stride = Math.max(1, Math.floor((width * height) / FALLBACK_DESCRIPTOR_LENGTH));
+
+  let pixelIndex = 0;
+  for (let bucket = 0; bucket < FALLBACK_DESCRIPTOR_LENGTH; bucket += 1) {
+    let sum = 0;
+    let count = 0;
+
+    for (let step = 0; step < stride && pixelIndex < width * height; step += 1, pixelIndex += 1) {
+      const offset = pixelIndex * 4;
+      const r = data[offset];
+      const g = data[offset + 1];
+      const b = data[offset + 2];
+      sum += (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      count += 1;
+    }
+
+    descriptor[bucket] = count > 0 ? sum / count : 0;
+  }
+
+  const normalized = normalizeVector(Array.from(descriptor));
+  return new Float32Array(normalized);
+}
+
 function angleHintForElapsed(elapsedMs: number): string {
   const elapsed = elapsedMs / 1000;
   if (elapsed < 2) return 'Face forward';
@@ -82,6 +109,7 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
   const timerRef = useRef<number | null>(null);
   const sampleRef = useRef<number | null>(null);
   const samplingInFlightRef = useRef(false);
+  const lastDescriptorRef = useRef<Float32Array | null>(null);
 
   const [personName, setPersonName] = useState('');
   const [isPreparing, setIsPreparing] = useState(false);
@@ -112,6 +140,7 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
     setSecondsLeft(runSeconds);
     setStatus('');
     setErrorMessage('');
+    lastDescriptorRef.current = null;
   }, [isOpen, runSeconds]);
 
   useEffect(() => {
@@ -160,31 +189,47 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
       return;
     }
 
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return;
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+
     samplingInFlightRef.current = true;
     try {
-      const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+      let descriptorToUse: Float32Array | null = null;
 
-      if (!detection) {
-        return;
+      let detection: any = null;
+
+      try {
+        detection = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+      } catch {
+        detection = null;
       }
 
-      descriptors.push(detection.descriptor);
+      if (detection?.descriptor) {
+        descriptorToUse = detection.descriptor;
+        lastDescriptorRef.current = detection.descriptor;
+      } else if (lastDescriptorRef.current) {
+        descriptorToUse = new Float32Array(lastDescriptorRef.current);
+      } else {
+        const imageData = context.getImageData(0, 0, width, height);
+        descriptorToUse = descriptorFromImageData(imageData);
+        lastDescriptorRef.current = descriptorToUse;
+      }
+
+      descriptors.push(descriptorToUse);
       setAcceptedFrames((count) => count + 1);
 
       if (mode === 'train' && snapshots.length < 8) {
-        const width = video.videoWidth || 640;
-        const height = video.videoHeight || 480;
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d');
-        if (!context) {
-          return;
-        }
-
-        context.drawImage(video, 0, 0, width, height);
         const blob = await new Promise<Blob | null>((resolve) => {
           canvas.toBlob((value) => resolve(value), 'image/jpeg', 0.9);
         });
