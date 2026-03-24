@@ -41,6 +41,31 @@ type SupabaseRow = {
   updated_at?: string;
 };
 
+type MatchAggregate = {
+  totalMatches: number;
+  booleanRates: {
+    leftStartingZone: string;
+    autoClimbAttempted: string;
+    droveOverBump: string;
+    droveUnderTrench: string;
+    playedDefense: string;
+    defendedAgainst: string;
+  };
+  numericAverages: {
+    autoFuelScored: string;
+    teleopFuelScored: string;
+    avgBps: string;
+    shootingConsistency: string;
+    intakeConsistency: string;
+    defenseEffectiveness: string;
+    foulsCaused: string;
+    climbTimeSeconds: string;
+  };
+  topHubStrategy: string;
+  topEndGameResult: string;
+  topCardReceived: string;
+};
+
 function normalizePayload(value: unknown): unknown {
   if (typeof value === 'string') {
     try {
@@ -214,6 +239,112 @@ function displayBoolean(value: unknown): 'Yes' | 'No' | 'Unknown' {
     return 'Unknown';
   }
   return value ? 'Yes' : 'No';
+}
+
+function formatPercent(numerator: number, denominator: number): string {
+  if (denominator <= 0) {
+    return 'N/A';
+  }
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function averageFrom(values: number[], digits = 1): string {
+  if (values.length === 0) {
+    return 'N/A';
+  }
+  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return avg.toFixed(digits);
+}
+
+function topFrequencyLabel(values: string[], fallback = 'Not set'): string {
+  if (values.length === 0) {
+    return fallback;
+  }
+
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  });
+
+  let top = fallback;
+  let topCount = 0;
+  counts.forEach((count, value) => {
+    if (count > topCount) {
+      top = value;
+      topCount = count;
+    }
+  });
+
+  return top;
+}
+
+function buildMatchAggregate(entries: RawEntry[]): MatchAggregate | null {
+  const payloads = entries
+    .map((entry) => asMatchPayload(entry.payload))
+    .filter((payload): payload is Partial<MatchScoutData> => payload !== null);
+
+  if (payloads.length === 0) {
+    return null;
+  }
+
+  const booleanRate = (selector: (match: Partial<MatchScoutData>) => unknown): string => {
+    const values = payloads.map(selector).filter((value): value is boolean => typeof value === 'boolean');
+    const positives = values.filter(Boolean).length;
+    return formatPercent(positives, values.length);
+  };
+
+  const numberAverage = (selector: (match: Partial<MatchScoutData>) => unknown, digits = 1): string => {
+    const numbers = payloads
+      .map(selector)
+      .map((value) => toNumber(value))
+      .filter((value): value is number => value !== null);
+    return averageFrom(numbers, digits);
+  };
+
+  const defenseOnly = payloads.filter((match) => match.playedDefense === true);
+  const defenseEffectiveness = averageFrom(
+    defenseOnly
+      .map((match) => toNumber(match.defenseEffectiveness))
+      .filter((value): value is number => value !== null),
+    1,
+  );
+
+  const hubStrategies = payloads
+    .map((match) => (typeof match.hubScoringStrategy === 'string' ? match.hubScoringStrategy.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  const endGameResults = payloads
+    .map((match) => (typeof match.endGameClimbResult === 'string' ? match.endGameClimbResult.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  const cards = payloads
+    .map((match) => (typeof match.cardReceived === 'string' ? match.cardReceived.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  return {
+    totalMatches: payloads.length,
+    booleanRates: {
+      leftStartingZone: booleanRate((match) => match.leftStartingZone),
+      autoClimbAttempted: booleanRate((match) => match.autoClimbAttempted),
+      droveOverBump: booleanRate((match) => match.droveOverBump),
+      droveUnderTrench: booleanRate((match) => match.droveUnderTrench),
+      playedDefense: booleanRate((match) => match.playedDefense),
+      defendedAgainst: booleanRate((match) => match.defendedAgainst),
+    },
+    numericAverages: {
+      autoFuelScored: numberAverage((match) => match.autoFuelScored, 1),
+      teleopFuelScored: numberAverage((match) => match.teleopFuelScored, 1),
+      avgBps: numberAverage((match) => match.avgBps, 2),
+      shootingConsistency: numberAverage((match) => match.shootingConsistency, 1),
+      intakeConsistency: numberAverage((match) => match.intakeConsistency, 1),
+      defenseEffectiveness,
+      foulsCaused: numberAverage((match) => match.foulsCaused, 1),
+      climbTimeSeconds: numberAverage((match) => match.climbTimeSeconds, 1),
+    },
+    topHubStrategy: topFrequencyLabel(hubStrategies),
+    topEndGameResult: topFrequencyLabel(endGameResults),
+    topCardReceived: topFrequencyLabel(cards),
+  };
 }
 
 type ValueRowProps = {
@@ -574,6 +705,11 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
     return { pit, match };
   }, [entries, selectedTeam]);
 
+  const selectedTeamMatchAggregate = useMemo(
+    () => buildMatchAggregate(selectedTeamScouting.match),
+    [selectedTeamScouting.match],
+  );
+
   const activeMetricKeys = useMemo(
     () => (Object.keys(visibleMetrics) as MetricKey[]).filter((key) => visibleMetrics[key]),
     [visibleMetrics],
@@ -881,76 +1017,56 @@ export function RawData({ eventKey, profileId }: RawDataProps) {
                     </div>
                   ))}
 
-                  {selectedTeamScouting.match.map((entry) => (
-                    <div key={entry.key} className="bg-slate-900 border border-slate-700 rounded-xl p-4">
+                  {selectedTeamScouting.match.length > 0 && (
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
-                        <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">match</span>
-                        <span className="text-slate-300 font-mono">Match {entry.matchNumber}</span>
-                        <span className="text-slate-500">Source: {entry.source}</span>
-                        <span className="text-slate-500">Updated: {entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : 'Unknown'}</span>
+                        <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">match aggregate</span>
+                        <span className="text-slate-500">Calculated from {selectedTeamScouting.match.length} saved match records</span>
                       </div>
 
-                      {(() => {
-                        const match = asMatchPayload(entry.payload);
-                        if (!match) {
-                          return <div className="text-sm text-slate-400">This record could not be rendered.</div>;
-                        }
+                      {!selectedTeamMatchAggregate ? (
+                        <div className="text-sm text-slate-400">No valid match payloads to aggregate.</div>
+                      ) : (
+                        <div className="space-y-4">
+                          <SectionCard title="Sample Size">
+                            <ValueRow label="Total Matches Aggregated" value={String(selectedTeamMatchAggregate.totalMatches)} mono />
+                          </SectionCard>
 
-                        return (
-                          <div className="space-y-4">
-                            <SectionCard title="Pre-Match Setup">
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <ValueRow label="Match Number" value={displayText(match.matchNumber, 'Unknown')} mono />
-                                <ValueRow label="Team Number" value={displayText(match.teamNumber, 'Unknown')} mono />
-                                <ValueRow label="Alliance Color" value={displayText(match.allianceColor)} />
-                              </div>
-                            </SectionCard>
+                          <SectionCard title="Action Rates (Percent of Matches)">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <ValueRow label="Leaves Starting Zone in Auto" value={selectedTeamMatchAggregate.booleanRates.leftStartingZone} />
+                              <ValueRow label="Attempts Auto Climb" value={selectedTeamMatchAggregate.booleanRates.autoClimbAttempted} />
+                              <ValueRow label="Drives over Bump" value={selectedTeamMatchAggregate.booleanRates.droveOverBump} />
+                              <ValueRow label="Drives under Trench" value={selectedTeamMatchAggregate.booleanRates.droveUnderTrench} />
+                              <ValueRow label="Plays Defense" value={selectedTeamMatchAggregate.booleanRates.playedDefense} />
+                              <ValueRow label="Gets Defended Against" value={selectedTeamMatchAggregate.booleanRates.defendedAgainst} />
+                            </div>
+                          </SectionCard>
 
-                            <SectionCard title="Autonomous (0:00 - 0:20)">
-                              <BoolRow label="Left Starting Zone" value={match.leftStartingZone} />
-                              <ValueRow label="Fuel Scored in Auto" value={displayText(match.autoFuelScored, '0')} mono />
-                              <BoolRow label="Tower Climb Attempted in Auto" value={match.autoClimbAttempted} />
+                          <SectionCard title="Averages per Match">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <ValueRow label="Auto Fuel Scored" value={selectedTeamMatchAggregate.numericAverages.autoFuelScored} mono />
+                              <ValueRow label="Teleop Fuel Scored" value={selectedTeamMatchAggregate.numericAverages.teleopFuelScored} mono />
+                              <ValueRow label="Average Balls Per Second" value={selectedTeamMatchAggregate.numericAverages.avgBps} mono />
+                              <ValueRow label="Shooting Consistency (1-5)" value={selectedTeamMatchAggregate.numericAverages.shootingConsistency} />
+                              <ValueRow label="Intake Consistency (1-5)" value={selectedTeamMatchAggregate.numericAverages.intakeConsistency} />
+                              <ValueRow label="Defense Effectiveness (1-5, when playing defense)" value={selectedTeamMatchAggregate.numericAverages.defenseEffectiveness} />
+                              <ValueRow label="Fouls Caused" value={selectedTeamMatchAggregate.numericAverages.foulsCaused} />
+                              <ValueRow label="Climb Time Seconds" value={selectedTeamMatchAggregate.numericAverages.climbTimeSeconds} />
+                            </div>
+                          </SectionCard>
 
-                              {match.autoClimbAttempted && (
-                                <ValueRow label="Auto Climb Result" value={displayText(match.autoClimbResult)} />
-                              )}
-                            </SectionCard>
-
-                            <SectionCard title="Teleop (0:20 - 2:30)">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <ValueRow label="Fuel Scored in Teleop" value={displayText(match.teleopFuelScored, '0')} mono />
-                                <ValueRow label="Avg Balls Per Second" value={displayText(match.avgBps, '0')} mono />
-                                <ValueRow label="Shooting Consistency (1-5)" value={displayText(match.shootingConsistency, 'Not rated')} />
-                                <ValueRow label="Intake Consistency (1-5)" value={displayText(match.intakeConsistency, 'Not rated')} />
-                              </div>
-
-                              <BoolRow label="Drove over Bump" value={match.droveOverBump} />
-                              <BoolRow label="Drove under Trench" value={match.droveUnderTrench} />
-                              <BoolRow label="Played Defense" value={match.playedDefense} />
-
-                              {match.playedDefense && (
-                                <ValueRow label="Defense Effectiveness (1-5)" value={displayText(match.defenseEffectiveness, 'Not rated')} />
-                              )}
-
-                              <BoolRow label="Defended Against" value={match.defendedAgainst} />
-                              <ValueRow label="Hub Scoring Strategy" value={displayText(match.hubScoringStrategy)} />
-                            </SectionCard>
-
-                            <SectionCard title="End Game">
-                              <ValueRow label="Tower Climb Result" value={displayText(match.endGameClimbResult)} />
-                              <ValueRow label="Climb Time (seconds)" value={displayText(match.climbTimeSeconds)} mono />
-                            </SectionCard>
-
-                            <SectionCard title="Post-Match">
-                              <ValueRow label="Fouls Caused" value={displayText(match.foulsCaused, '0')} mono />
-                              <ValueRow label="Card Received" value={displayText(match.cardReceived)} />
-                              <ValueRow label="Notes" value={displayText(match.notes)} />
-                            </SectionCard>
-                          </div>
-                        );
-                      })()}
+                          <SectionCard title="Most Frequent Outcomes">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <ValueRow label="Hub Scoring Strategy" value={selectedTeamMatchAggregate.topHubStrategy} />
+                              <ValueRow label="End Game Climb Result" value={selectedTeamMatchAggregate.topEndGameResult} />
+                              <ValueRow label="Card Received" value={selectedTeamMatchAggregate.topCardReceived} />
+                            </div>
+                          </SectionCard>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </>
