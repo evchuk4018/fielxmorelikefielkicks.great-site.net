@@ -35,13 +35,18 @@ function randomSuffix(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export async function uploadPitScoutPhoto(teamNumber: number, file: File): Promise<UploadedPitPhoto> {
+export async function uploadPitScoutPhoto(eventKey: string, teamNumber: number, file: File): Promise<UploadedPitPhoto> {
+  const normalizedEventKey = eventKey.trim().toLowerCase();
+  if (!normalizedEventKey) {
+    throw new Error('A valid event key is required to upload a pit photo.');
+  }
+
   if (!Number.isInteger(teamNumber) || teamNumber <= 0) {
     throw new Error('A valid team number is required to upload a pit photo.');
   }
 
   const ext = getFileExtension(file.name);
-  const path = `pit/${teamNumber}/${Date.now()}-${randomSuffix()}.${ext}`;
+  const path = `pit/${normalizedEventKey}/${teamNumber}/${Date.now()}-${randomSuffix()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage.from(PIT_SCOUT_PHOTO_BUCKET).upload(path, file, {
     upsert: false,

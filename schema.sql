@@ -3,10 +3,42 @@
 
 create table if not exists public.pit_scouts (
   id text primary key,
+  event_key text,
+  profile_id text,
   team_number integer,
   data jsonb not null,
   updated_at timestamptz not null default now()
 );
+
+alter table public.pit_scouts
+add column if not exists event_key text;
+
+alter table public.pit_scouts
+add column if not exists profile_id text;
+
+-- Purge legacy unscoped pit records so all remaining data is competition-specific.
+delete from public.pit_scouts
+where coalesce(event_key, '') = ''
+   or team_number is null;
+
+alter table public.pit_scouts
+alter column event_key set not null;
+
+alter table public.pit_scouts
+alter column team_number set not null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'pit_scouts_unique_event_team'
+      and conrelid = 'public.pit_scouts'::regclass
+  ) then
+    alter table public.pit_scouts
+    add constraint pit_scouts_unique_event_team unique (event_key, team_number);
+  end if;
+end;
+$$;
 
 create table if not exists public.match_scouts (
   id text primary key,
@@ -24,6 +56,8 @@ add column if not exists previous_team_ranking text;
 
 create index if not exists idx_pit_scouts_updated_at on public.pit_scouts (updated_at desc);
 create index if not exists idx_pit_scouts_team_number on public.pit_scouts (team_number);
+create index if not exists idx_pit_scouts_event_key on public.pit_scouts (event_key);
+create index if not exists idx_pit_scouts_event_team on public.pit_scouts (event_key, team_number);
 
 create index if not exists idx_match_scouts_updated_at on public.match_scouts (updated_at desc);
 create index if not exists idx_match_scouts_match_number on public.match_scouts (match_number);
@@ -155,6 +189,11 @@ on storage.objects
 for delete
 to authenticated
 using (bucket_id = 'pit-scout-photos');
+
+-- Purge legacy unscoped pit photos under pit/{teamNumber}/...
+delete from storage.objects
+where bucket_id = 'pit-scout-photos'
+  and name ~ '^pit/[0-9]+/';
 
 -- Clean up legacy table from older migrations.
 drop table if exists public.team_imports;

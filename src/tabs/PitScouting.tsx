@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { storage } from '../lib/storage';
-import { PitScoutData, ClimbLevel, DriveTrainType, DriveMotor, IntakePosition, ShooterType } from '../types';
+import { PitScoutData, ClimbLevel, DriveTrainType, DriveMotor, IntakePosition, ShooterType, CompetitionProfile } from '../types';
 import { Stepper } from '../components/Stepper';
 import { Toggle, MultiToggle } from '../components/Toggle';
 import { showToast } from '../components/Toast';
@@ -9,6 +9,16 @@ import { Camera, ImagePlus, Save, Trash2 } from 'lucide-react';
 
 const MAX_PIT_PHOTOS = 3;
 const MAX_PIT_PHOTO_BYTES = 8 * 1024 * 1024;
+const LEGACY_PIT_KEY_REGEX = /^pitScout:\d+$/;
+const SYNC_QUEUE_KEY = 'syncQueue';
+
+type PitScoutingProps = {
+  activeProfile: CompetitionProfile | null;
+};
+
+function getScopedPitKey(profileId: string, teamNumber: number): string {
+  return `pitScout:${profileId}:${teamNumber}`;
+}
 
 function normalizePhotoUrls(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -42,7 +52,7 @@ const INITIAL_STATE: PitScoutData = {
   notes: ''
 };
 
-export function PitScouting() {
+export function PitScouting({ activeProfile }: PitScoutingProps) {
   const [data, setData] = useState<PitScoutData>(INITIAL_STATE);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [deletingPhotoUrl, setDeletingPhotoUrl] = useState<string | null>(null);
@@ -50,23 +60,55 @@ export function PitScouting() {
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (data.teamNumber) {
-      const saved = storage.get<any>(`pitScout:${data.teamNumber}`);
-      if (saved && saved.data) {
-        setData({
-          ...INITIAL_STATE,
-          ...saved.data,
-          photoUrls: normalizePhotoUrls(saved.data.photoUrls),
-        });
+    // One-time destructive cleanup for legacy unscoped pit data.
+    const legacyKeys = storage.getAllKeys().filter((key) => LEGACY_PIT_KEY_REGEX.test(key));
+    legacyKeys.forEach((key) => {
+      localStorage.removeItem(key);
+    });
+
+    const queue = storage.getSyncQueue();
+    const nextQueue = queue.filter((record) => {
+      if (record.type !== 'pitScout') {
+        return true;
       }
+
+      const payload = (record.data || {}) as Partial<PitScoutData>;
+      return Boolean(payload.eventKey && payload.profileId);
+    });
+
+    if (nextQueue.length !== queue.length) {
+      storage.set(SYNC_QUEUE_KEY, nextQueue);
     }
-  }, [data.teamNumber]);
+  }, []);
+
+  useEffect(() => {
+    if (!activeProfile?.id || !data.teamNumber) {
+      return;
+    }
+
+    const scopedKey = getScopedPitKey(activeProfile.id, data.teamNumber);
+    const saved = storage.get<any>(scopedKey);
+    if (saved && saved.data) {
+      setData({
+        ...INITIAL_STATE,
+        ...saved.data,
+        eventKey: activeProfile.eventKey,
+        profileId: activeProfile.id,
+        photoUrls: normalizePhotoUrls(saved.data.photoUrls),
+      });
+    }
+  }, [activeProfile?.eventKey, activeProfile?.id, data.teamNumber]);
 
   const updateField = <K extends keyof PitScoutData>(field: K, value: PitScoutData[K]) => {
-    const newData = { ...data, [field]: value };
+    const newData = {
+      ...data,
+      [field]: value,
+      eventKey: activeProfile?.eventKey,
+      profileId: activeProfile?.id || undefined,
+    };
     setData(newData);
-    if (newData.teamNumber) {
-      storage.saveRecord('pitScout', `pitScout:${newData.teamNumber}`, newData);
+    if (activeProfile?.id && newData.teamNumber) {
+      storage.saveRecord('pitScout', getScopedPitKey(activeProfile.id, newData.teamNumber), newData);
     }
   };
 
@@ -78,6 +120,11 @@ export function PitScouting() {
   };
 
   const handleSave = () => {
+    if (!activeProfile?.id) {
+      showToast('Select a competition profile before scouting pits');
+      return;
+    }
+
     if (!data.teamNumber) {
       showToast('Please enter a team number');
       return;
@@ -99,6 +146,11 @@ export function PitScouting() {
       return;
     }
 
+    if (!activeProfile?.eventKey) {
+      showToast('Select a competition profile before uploading photos');
+      return;
+    }
+
     const existingUrls = normalizePhotoUrls(data.photoUrls);
     if (existingUrls.length >= MAX_PIT_PHOTOS) {
       showToast(`You can upload up to ${MAX_PIT_PHOTOS} photos.`);
@@ -117,7 +169,7 @@ export function PitScouting() {
 
     try {
       setIsUploadingPhoto(true);
-      const result = await uploadPitScoutPhoto(Number(data.teamNumber), file);
+      const result = await uploadPitScoutPhoto(activeProfile.eventKey, Number(data.teamNumber), file);
       updateField('photoUrls', [...existingUrls, result.publicUrl]);
       showToast('Photo uploaded');
     } catch (error) {
@@ -156,6 +208,12 @@ export function PitScouting() {
     <div className="max-w-2xl mx-auto space-y-8 pb-24">
       <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-6">
         <h2 className="text-2xl font-bold text-white mb-4">Robot Details</h2>
+
+        {!activeProfile && (
+          <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+            Select a competition profile to save pit scouting data.
+          </p>
+        )}
         
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">Team Number</label>

@@ -105,7 +105,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'pit':
-        return <PitScouting />;
+        return <PitScouting activeProfile={activeProfile} />;
       case 'match':
         return <EventMatchScouting activeProfile={activeProfile} />;
       case 'strategy':
@@ -113,7 +113,7 @@ export default function App() {
       case 'raw':
         return <RawData eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       default:
-        return <PitScouting />;
+        return <PitScouting activeProfile={activeProfile} />;
     }
   };
 

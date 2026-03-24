@@ -11,6 +11,8 @@ export type CardReceived = 'None' | 'Yellow' | 'Red';
 export type DefenseQuality = 'Good' | 'Bad';
 
 export interface PitScoutData {
+  eventKey?: string;
+  profileId?: string;
   teamNumber: number | '';
   photoUrls: string[];
   canClimbTower: boolean;

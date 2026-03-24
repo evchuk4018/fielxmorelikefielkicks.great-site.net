@@ -39,6 +39,7 @@ type SupabaseRow = {
   data: unknown;
   team_number?: number | null;
   match_number?: number | null;
+  event_key?: string | null;
   updated_at?: string;
 };
 
@@ -380,11 +381,11 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     const loadData = async () => {
       const localPitEntries = storage
         .getAllKeys()
-        .filter((key) => key.startsWith('pitScout:'))
+        .filter((key) => (profileId ? key.startsWith(`pitScout:${profileId}:`) : false))
         .map((key) => storage.get<SyncRecord<any>>(key))
         .filter(Boolean)
         .map((record) => ({
-          key: `pit:${record!.data?.teamNumber}`,
+          key: `pit:${record!.data?.eventKey || eventKey}:${record!.data?.teamNumber}`,
           type: 'pit' as const,
           teamNumber: record!.data?.teamNumber ?? 'Unknown',
           updatedAt: record!.timestamp || 0,
@@ -407,8 +408,15 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
           payload: record!.data,
         }));
 
+      const pitPromise = eventKey
+        ? supabase
+            .from('pit_scouts')
+            .select('team_number, event_key, data, updated_at')
+            .eq('event_key', eventKey.trim().toLowerCase())
+        : Promise.resolve({ data: [], error: null });
+
       const [pitResult, matchResult] = await Promise.all([
-        supabase.from('pit_scouts').select('team_number, data, updated_at'),
+        pitPromise,
         supabase.from('match_scouts').select('match_number, team_number, data, updated_at'),
       ]);
 
@@ -416,14 +424,18 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
         ? []
         : ((pitResult.data || []) as SupabaseRow[]).map((row) => {
             const payload = normalizePayload(row.data) as any;
+            const payloadWithContext = {
+              ...payload,
+              eventKey: (payload?.eventKey || row.event_key || '').toString().trim().toLowerCase(),
+            };
             const teamNumber = row.team_number ?? payload?.teamNumber ?? 'Unknown';
             return {
-              key: `pit:${teamNumber}`,
+              key: `pit:${row.event_key || payload?.eventKey || 'unknown'}:${teamNumber}`,
               type: 'pit',
               teamNumber,
               updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,
               source: 'remote',
-              payload,
+              payload: payloadWithContext,
             };
           });
 
@@ -471,7 +483,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       window.removeEventListener('team-import-success', refresh);
       window.removeEventListener('storage', refresh);
     };
-  }, []);
+  }, [eventKey, profileId]);
 
   useEffect(() => {
     if (!eventKey) {
@@ -672,7 +684,16 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     }
 
     const pit = entries
-      .filter((entry) => entry.type === 'pit' && Number(entry.teamNumber) === selectedTeam)
+      .filter((entry) => {
+        if (entry.type !== 'pit' || Number(entry.teamNumber) !== selectedTeam) {
+          return false;
+        }
+
+        const payload = asPitPayload(entry.payload);
+        const payloadEventKey = typeof payload?.eventKey === 'string' ? payload.eventKey.trim().toLowerCase() : '';
+        const activeEventKey = eventKey.trim().toLowerCase();
+        return payloadEventKey !== '' && payloadEventKey === activeEventKey;
+      })
       .sort((a, b) => b.updatedAt - a.updatedAt);
 
     const match = entries
