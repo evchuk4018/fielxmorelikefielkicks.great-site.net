@@ -1,9 +1,9 @@
 import { TeamImportData } from '../types';
 
 export type MatchNoteSummary = {
-  offense: string;
-  defense: string;
-  general: string;
+  autonStrategy: string;
+  defenseStrategy: string;
+  overallSummary: string;
 };
 
 export const gemini = {
@@ -42,7 +42,7 @@ export const gemini = {
   async summarizeMatchNotes(payload: {
     eventKey: string;
     teamNumber: number;
-    offenseNotes: string[];
+    autonNotes: string[];
     defenseNotes: string[];
     generalNotes: string[];
   }): Promise<MatchNoteSummary> {

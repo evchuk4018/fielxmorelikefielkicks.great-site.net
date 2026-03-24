@@ -42,36 +42,9 @@ type SupabaseRow = {
   updated_at?: string;
 };
 
-type MatchAggregate = {
+type MatchNotesBundle = {
   totalMatches: number;
-  booleanRates: {
-    leftStartingZone: string;
-    autoClimbAttempted: string;
-    droveOverBump: string;
-    droveUnderTrench: string;
-    playedDefense: string;
-    defendedAgainst: string;
-  };
-  numericAverages: {
-    autoFuelScored: string;
-    teleopFuelScored: string;
-    avgBps: string;
-    shootingConsistency: string;
-    intakeConsistency: string;
-    defenseEffectiveness: string;
-    foulsCaused: string;
-    climbTimeSeconds: string;
-  };
-  topHubStrategy: string;
-  topEndGameResult: string;
-  topCardReceived: string;
-  offenseNotes: string[];
-  defenseNotes: string[];
-  generalNotes: string[];
-};
-
-type NoteBuckets = {
-  offenseNotes: string[];
+  autonNotes: string[];
   defenseNotes: string[];
   generalNotes: string[];
 };
@@ -263,43 +236,6 @@ function displayPhotoUrls(value: unknown): string[] {
     .slice(0, 3);
 }
 
-function formatPercent(numerator: number, denominator: number): string {
-  if (denominator <= 0) {
-    return 'N/A';
-  }
-  return `${Math.round((numerator / denominator) * 100)}%`;
-}
-
-function averageFrom(values: number[], digits = 1): string {
-  if (values.length === 0) {
-    return 'N/A';
-  }
-  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return avg.toFixed(digits);
-}
-
-function topFrequencyLabel(values: string[], fallback = 'Not set'): string {
-  if (values.length === 0) {
-    return fallback;
-  }
-
-  const counts = new Map<string, number>();
-  values.forEach((value) => {
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  });
-
-  let top = fallback;
-  let topCount = 0;
-  counts.forEach((count, value) => {
-    if (count > topCount) {
-      top = value;
-      topCount = count;
-    }
-  });
-
-  return top;
-}
-
 function normalizeNoteText(value: unknown): string {
   if (typeof value !== 'string') {
     return '';
@@ -308,15 +244,15 @@ function normalizeNoteText(value: unknown): string {
   return value.trim();
 }
 
-function collectNoteBuckets(payloads: Partial<MatchScoutData>[]): NoteBuckets {
-  const offenseNotes: string[] = [];
+function collectNoteBuckets(payloads: Partial<MatchScoutData>[]): Omit<MatchNotesBundle, 'totalMatches'> {
+  const autonNotes: string[] = [];
   const defenseNotes: string[] = [];
   const generalNotes: string[] = [];
 
   payloads.forEach((match) => {
     const auton = normalizeNoteText(match.autonNotes);
     if (auton) {
-      offenseNotes.push(auton);
+      autonNotes.push(auton);
     }
 
     const defenseText = normalizeNoteText(match.defenseNotes);
@@ -336,81 +272,21 @@ function collectNoteBuckets(payloads: Partial<MatchScoutData>[]): NoteBuckets {
   });
 
   return {
-    offenseNotes,
+    autonNotes,
     defenseNotes,
     generalNotes,
   };
 }
 
-function buildMatchAggregate(entries: RawEntry[]): MatchAggregate | null {
+function buildMatchNotesBundle(entries: RawEntry[]): MatchNotesBundle {
   const payloads = entries
     .map((entry) => asMatchPayload(entry.payload))
     .filter((payload): payload is Partial<MatchScoutData> => payload !== null);
-
-  if (payloads.length === 0) {
-    return null;
-  }
-
-  const booleanRate = (selector: (match: Partial<MatchScoutData>) => unknown): string => {
-    const values = payloads.map(selector).filter((value): value is boolean => typeof value === 'boolean');
-    const positives = values.filter(Boolean).length;
-    return formatPercent(positives, values.length);
-  };
-
-  const numberAverage = (selector: (match: Partial<MatchScoutData>) => unknown, digits = 1): string => {
-    const numbers = payloads
-      .map(selector)
-      .map((value) => toNumber(value))
-      .filter((value): value is number => value !== null);
-    return averageFrom(numbers, digits);
-  };
-
-  const defenseOnly = payloads.filter((match) => match.playedDefense === true);
-  const defenseEffectiveness = averageFrom(
-    defenseOnly
-      .map((match) => toNumber(match.defenseEffectiveness))
-      .filter((value): value is number => value !== null),
-    1,
-  );
-
-  const hubStrategies = payloads
-    .map((match) => (typeof match.hubScoringStrategy === 'string' ? match.hubScoringStrategy.trim() : ''))
-    .filter((value) => value.length > 0);
-
-  const endGameResults = payloads
-    .map((match) => (typeof match.endGameClimbResult === 'string' ? match.endGameClimbResult.trim() : ''))
-    .filter((value) => value.length > 0);
-
-  const cards = payloads
-    .map((match) => (typeof match.cardReceived === 'string' ? match.cardReceived.trim() : ''))
-    .filter((value) => value.length > 0);
-
-  const { offenseNotes, defenseNotes, generalNotes } = collectNoteBuckets(payloads);
+  const { autonNotes, defenseNotes, generalNotes } = collectNoteBuckets(payloads);
 
   return {
     totalMatches: payloads.length,
-    booleanRates: {
-      leftStartingZone: booleanRate((match) => match.leftStartingZone),
-      autoClimbAttempted: booleanRate((match) => match.autoClimbAttempted),
-      droveOverBump: booleanRate((match) => match.droveOverBump),
-      droveUnderTrench: booleanRate((match) => match.droveUnderTrench),
-      playedDefense: booleanRate((match) => match.playedDefense),
-      defendedAgainst: booleanRate((match) => match.defendedAgainst),
-    },
-    numericAverages: {
-      autoFuelScored: numberAverage((match) => match.autoFuelScored, 1),
-      teleopFuelScored: numberAverage((match) => match.teleopFuelScored, 1),
-      avgBps: numberAverage((match) => match.avgBps, 2),
-      shootingConsistency: numberAverage((match) => match.shootingConsistency, 1),
-      intakeConsistency: numberAverage((match) => match.intakeConsistency, 1),
-      defenseEffectiveness,
-      foulsCaused: numberAverage((match) => match.foulsCaused, 1),
-      climbTimeSeconds: numberAverage((match) => match.climbTimeSeconds, 1),
-    },
-    topHubStrategy: topFrequencyLabel(hubStrategies),
-    topEndGameResult: topFrequencyLabel(endGameResults),
-    topCardReceived: topFrequencyLabel(cards),
-    offenseNotes,
+    autonNotes,
     defenseNotes,
     generalNotes,
   };
@@ -652,15 +528,17 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
             setSelectedTeam(embeddedTeamNumber && embeddedTeamNumber > 0 ? embeddedTeamNumber : null);
             setTeamsError('No teams found for this event.');
           } else {
-            setSelectedTeam((prev) => {
-              if (embeddedTeamNumber && list.some((team) => team.teamNumber === embeddedTeamNumber)) {
-                return embeddedTeamNumber;
-              }
-              if (prev && list.some((team) => team.teamNumber === prev)) {
-                return prev;
-              }
-              return list[0].teamNumber;
-            });
+            // In embedded mode (Strategy popup), always pin to the requested team.
+            if (embeddedTeamNumber && embeddedTeamNumber > 0) {
+              setSelectedTeam(embeddedTeamNumber);
+            } else {
+              setSelectedTeam((prev) => {
+                if (prev && list.some((team) => team.teamNumber === prev)) {
+                  return prev;
+                }
+                return list[0].teamNumber;
+              });
+            }
           }
         }
       } catch (error) {
@@ -813,28 +691,28 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     return { pit, match };
   }, [entries, selectedTeam, eventKey]);
 
-  const selectedTeamMatchAggregate = useMemo(
-    () => buildMatchAggregate(selectedTeamScouting.match),
+  const selectedTeamMatchNotes = useMemo(
+    () => buildMatchNotesBundle(selectedTeamScouting.match),
     [selectedTeamScouting.match],
   );
 
   useEffect(() => {
-    if (!selectedTeam || !selectedTeamMatchAggregate || !eventKey) {
+    if (!selectedTeam || !eventKey) {
       setNoteSummary(null);
       setIsLoadingNoteSummary(false);
       setNoteSummaryError(null);
       return;
     }
 
-    const offenseNotes = selectedTeamMatchAggregate.offenseNotes;
-    const defenseNotes = selectedTeamMatchAggregate.defenseNotes;
-    const generalNotes = selectedTeamMatchAggregate.generalNotes;
+    const autonNotes = selectedTeamMatchNotes.autonNotes;
+    const defenseNotes = selectedTeamMatchNotes.defenseNotes;
+    const generalNotes = selectedTeamMatchNotes.generalNotes;
 
-    if (offenseNotes.length === 0 && defenseNotes.length === 0 && generalNotes.length === 0) {
+    if (autonNotes.length === 0 && defenseNotes.length === 0 && generalNotes.length === 0) {
       setNoteSummary({
-        offense: 'No offense notes were provided for this team yet.',
-        defense: 'No defense notes were provided for this team yet.',
-        general: 'No general notes were provided for this team yet.',
+        autonStrategy: 'No autonomous strategy notes were provided for this team yet.',
+        defenseStrategy: 'No defense strategy notes were provided for this team yet.',
+        overallSummary: 'No additional match notes were provided for this team yet.',
       });
       setIsLoadingNoteSummary(false);
       setNoteSummaryError(null);
@@ -849,7 +727,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       .summarizeMatchNotes({
         eventKey,
         teamNumber: selectedTeam,
-        offenseNotes,
+        autonNotes,
         defenseNotes,
         generalNotes,
       })
@@ -873,7 +751,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     return () => {
       cancelled = true;
     };
-  }, [eventKey, selectedTeam, selectedTeamMatchAggregate]);
+  }, [eventKey, selectedTeam, selectedTeamMatchNotes]);
 
   const activeMetricKeys = useMemo(
     () => (Object.keys(visibleMetrics) as MetricKey[]).filter((key) => visibleMetrics[key]),
@@ -1177,6 +1055,87 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                               <ValueRow label="Autonomous Description" value={displayText(pit.autoDescription)} />
                               <ValueRow label="Vision Setup" value={displayText(pit.visionSetup)} />
                               <ValueRow label="Additional Notes" value={displayText(pit.notes)} />
+
+                              <div className="pt-2 border-t border-slate-700/70 space-y-3">
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <span className="px-2 py-1 rounded bg-slate-800 text-slate-200 uppercase">match strategy notes</span>
+                                  <span className="text-slate-500">From {selectedTeamMatchNotes.totalMatches} saved match records</span>
+                                </div>
+
+                                {isLoadingNoteSummary && (
+                                  <p className="text-sm text-slate-400">Summarizing cumulative autonomous and defense strategies...</p>
+                                )}
+
+                                {!isLoadingNoteSummary && noteSummaryError && (
+                                  <p className="text-sm text-rose-300">{noteSummaryError}</p>
+                                )}
+
+                                {!isLoadingNoteSummary && !noteSummaryError && noteSummary && (
+                                  <div className="space-y-3">
+                                    <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                                      <p className="text-xs uppercase tracking-wide text-slate-400">Cumulative Auton Strategy</p>
+                                      <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.autonStrategy}</p>
+                                    </div>
+
+                                    <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                                      <p className="text-xs uppercase tracking-wide text-slate-400">Cumulative Defense Strategy</p>
+                                      <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.defenseStrategy}</p>
+                                    </div>
+
+                                    <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                                      <p className="text-xs uppercase tracking-wide text-slate-400">Overall Match Notes</p>
+                                      <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.overallSummary}</p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="space-y-3">
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Auton Notes from Match Tab</p>
+                                    {selectedTeamMatchNotes.autonNotes.length === 0 ? (
+                                      <p className="text-sm text-slate-500">No auton notes entered.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedTeamMatchNotes.autonNotes.map((note, index) => (
+                                          <p key={`auton-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                            {note}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Defense Notes from Match Tab</p>
+                                    {selectedTeamMatchNotes.defenseNotes.length === 0 ? (
+                                      <p className="text-sm text-slate-500">No defense notes entered.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedTeamMatchNotes.defenseNotes.map((note, index) => (
+                                          <p key={`defense-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                            {note}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">General Notes from Match Tab</p>
+                                    {selectedTeamMatchNotes.generalNotes.length === 0 ? (
+                                      <p className="text-sm text-slate-500">No general notes entered.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedTeamMatchNotes.generalNotes.map((note, index) => (
+                                          <p key={`general-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                            {note}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </SectionCard>
 
                             {displayPhotoUrls(pit.photoUrls).length > 0 && (
@@ -1201,132 +1160,90 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                     </div>
                   ))}
 
-                  {selectedTeamScouting.match.length > 0 && (
+                  {selectedTeamScouting.pit.length === 0 && selectedTeamScouting.match.length > 0 && (
                     <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
                       <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
-                        <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">match aggregate</span>
-                        <span className="text-slate-500">Calculated from {selectedTeamScouting.match.length} saved match records</span>
+                        <span className="px-2 py-1 rounded bg-slate-700 text-slate-200 uppercase">match strategy notes</span>
+                        <span className="text-slate-500">No pit scout record found yet. Showing notes from {selectedTeamMatchNotes.totalMatches} saved match records.</span>
                       </div>
 
-                      {!selectedTeamMatchAggregate ? (
-                        <div className="text-sm text-slate-400">No valid match payloads to aggregate.</div>
-                      ) : (
-                        <div className="space-y-4">
-                          <SectionCard title="Sample Size">
-                            <ValueRow label="Total Matches Aggregated" value={String(selectedTeamMatchAggregate.totalMatches)} mono />
-                          </SectionCard>
+                      <SectionCard title="Cumulative Strategy Summary">
+                        {isLoadingNoteSummary && (
+                          <p className="text-sm text-slate-400">Summarizing cumulative autonomous and defense strategies...</p>
+                        )}
 
-                          <SectionCard title="Action Rates (Percent of Matches)">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <ValueRow label="Leaves Starting Zone in Auto" value={selectedTeamMatchAggregate.booleanRates.leftStartingZone} />
-                              <ValueRow label="Attempts Auto Climb" value={selectedTeamMatchAggregate.booleanRates.autoClimbAttempted} />
-                              <ValueRow label="Drives over Bump" value={selectedTeamMatchAggregate.booleanRates.droveOverBump} />
-                              <ValueRow label="Drives under Trench" value={selectedTeamMatchAggregate.booleanRates.droveUnderTrench} />
-                              <ValueRow label="Plays Defense" value={selectedTeamMatchAggregate.booleanRates.playedDefense} />
-                              <ValueRow label="Gets Defended Against" value={selectedTeamMatchAggregate.booleanRates.defendedAgainst} />
+                        {!isLoadingNoteSummary && noteSummaryError && (
+                          <p className="text-sm text-rose-300">{noteSummaryError}</p>
+                        )}
+
+                        {!isLoadingNoteSummary && !noteSummaryError && noteSummary && (
+                          <div className="space-y-3">
+                            <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Cumulative Auton Strategy</p>
+                              <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.autonStrategy}</p>
                             </div>
-                          </SectionCard>
 
-                          <SectionCard title="Averages per Match">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <ValueRow label="Auto Fuel Scored" value={selectedTeamMatchAggregate.numericAverages.autoFuelScored} mono />
-                              <ValueRow label="Teleop Fuel Scored" value={selectedTeamMatchAggregate.numericAverages.teleopFuelScored} mono />
-                              <ValueRow label="Average Balls Per Second" value={selectedTeamMatchAggregate.numericAverages.avgBps} mono />
-                              <ValueRow label="Shooting Consistency (1-5)" value={selectedTeamMatchAggregate.numericAverages.shootingConsistency} />
-                              <ValueRow label="Intake Consistency (1-5)" value={selectedTeamMatchAggregate.numericAverages.intakeConsistency} />
-                              <ValueRow label="Defense Effectiveness (1-5, when playing defense)" value={selectedTeamMatchAggregate.numericAverages.defenseEffectiveness} />
-                              <ValueRow label="Fouls Caused" value={selectedTeamMatchAggregate.numericAverages.foulsCaused} />
-                              <ValueRow label="Climb Time Seconds" value={selectedTeamMatchAggregate.numericAverages.climbTimeSeconds} />
+                            <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Cumulative Defense Strategy</p>
+                              <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.defenseStrategy}</p>
                             </div>
-                          </SectionCard>
 
-                          <SectionCard title="Most Frequent Outcomes">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <ValueRow label="Hub Scoring Strategy" value={selectedTeamMatchAggregate.topHubStrategy} />
-                              <ValueRow label="End Game Climb Result" value={selectedTeamMatchAggregate.topEndGameResult} />
-                              <ValueRow label="Card Received" value={selectedTeamMatchAggregate.topCardReceived} />
+                            <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Overall Match Notes</p>
+                              <p className="text-sm text-slate-100 whitespace-pre-line">{noteSummary.overallSummary}</p>
                             </div>
-                          </SectionCard>
+                          </div>
+                        )}
+                      </SectionCard>
 
-                          <SectionCard title="Gemini Notes Summary">
-                            {isLoadingNoteSummary && (
-                              <p className="text-sm text-slate-400">Summarizing offense, defense, and general notes...</p>
-                            )}
-
-                            {!isLoadingNoteSummary && noteSummaryError && (
-                              <p className="text-sm text-rose-300">{noteSummaryError}</p>
-                            )}
-
-                            {!isLoadingNoteSummary && !noteSummaryError && noteSummary && (
-                              <div className="space-y-4">
-                                <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
-                                  <p className="text-xs uppercase tracking-wide text-slate-400">Offense</p>
-                                  <p className="text-sm text-slate-100">{noteSummary.offense}</p>
-                                </div>
-
-                                <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
-                                  <p className="text-xs uppercase tracking-wide text-slate-400">Defense</p>
-                                  <p className="text-sm text-slate-100">{noteSummary.defense}</p>
-                                </div>
-
-                                <div className="bg-slate-950/40 border border-slate-700 rounded-lg p-3 space-y-1">
-                                  <p className="text-xs uppercase tracking-wide text-slate-400">General Notes</p>
-                                  <p className="text-sm text-slate-100">{noteSummary.general}</p>
-                                </div>
+                      <SectionCard title="Source Notes from Match Tab">
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Auton Notes</p>
+                            {selectedTeamMatchNotes.autonNotes.length === 0 ? (
+                              <p className="text-sm text-slate-500">No auton notes entered.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {selectedTeamMatchNotes.autonNotes.map((note, index) => (
+                                  <p key={`auton-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                    {note}
+                                  </p>
+                                ))}
                               </div>
                             )}
-                          </SectionCard>
+                          </div>
 
-                          <SectionCard title="Source Notes Used for Summary">
-                            <div className="space-y-3">
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Offense Notes</p>
-                                {selectedTeamMatchAggregate.offenseNotes.length === 0 ? (
-                                  <p className="text-sm text-slate-500">No offense notes entered.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {selectedTeamMatchAggregate.offenseNotes.map((note, index) => (
-                                      <p key={`offense-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                        {note}
-                                      </p>
-                                    ))}
-                                  </div>
-                                )}
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Defense Notes</p>
+                            {selectedTeamMatchNotes.defenseNotes.length === 0 ? (
+                              <p className="text-sm text-slate-500">No defense notes entered.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {selectedTeamMatchNotes.defenseNotes.map((note, index) => (
+                                  <p key={`defense-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                    {note}
+                                  </p>
+                                ))}
                               </div>
+                            )}
+                          </div>
 
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Defense Notes</p>
-                                {selectedTeamMatchAggregate.defenseNotes.length === 0 ? (
-                                  <p className="text-sm text-slate-500">No defense notes entered.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {selectedTeamMatchAggregate.defenseNotes.map((note, index) => (
-                                      <p key={`defense-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                        {note}
-                                      </p>
-                                    ))}
-                                  </div>
-                                )}
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">General Notes</p>
+                            {selectedTeamMatchNotes.generalNotes.length === 0 ? (
+                              <p className="text-sm text-slate-500">No general notes entered.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {selectedTeamMatchNotes.generalNotes.map((note, index) => (
+                                  <p key={`general-fallback-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
+                                    {note}
+                                  </p>
+                                ))}
                               </div>
-
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">General Notes</p>
-                                {selectedTeamMatchAggregate.generalNotes.length === 0 ? (
-                                  <p className="text-sm text-slate-500">No general notes entered.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {selectedTeamMatchAggregate.generalNotes.map((note, index) => (
-                                      <p key={`general-${index}`} className="text-sm text-slate-200 bg-slate-950/40 border border-slate-700 rounded-lg p-2">
-                                        {note}
-                                      </p>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </SectionCard>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </SectionCard>
                     </div>
                   )}
                 </div>

@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const eventKey = typeof req.body?.eventKey === 'string' ? req.body.eventKey.trim() : '';
   const teamNumber = Number(req.body?.teamNumber);
 
-  const offenseNotes = toStringArray(req.body?.offenseNotes);
+  const autonNotes = toStringArray(req.body?.autonNotes);
   const defenseNotes = toStringArray(req.body?.defenseNotes);
   const generalNotes = toStringArray(req.body?.generalNotes);
 
@@ -29,11 +29,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'eventKey and teamNumber are required' });
   }
 
-  if (offenseNotes.length === 0 && defenseNotes.length === 0 && generalNotes.length === 0) {
+  if (autonNotes.length === 0 && defenseNotes.length === 0 && generalNotes.length === 0) {
     return res.status(200).json({
-      offense: 'No offense notes were provided for this team yet.',
-      defense: 'No defense notes were provided for this team yet.',
-      general: 'No general notes were provided for this team yet.',
+      autonStrategy: 'No autonomous strategy notes were provided for this team yet.',
+      defenseStrategy: 'No defense strategy notes were provided for this team yet.',
+      overallSummary: 'No additional match notes were provided for this team yet.',
     });
   }
 
@@ -46,30 +46,35 @@ export default async function handler(req, res) {
 
   const prompt = `
 You are summarizing FIRST Robotics Competition scouting notes for one team at one event.
-Create a concise blended summary that averages repeated note patterns and disagreements.
+Extract cumulative strategy insights with clear structure.
 
 Context:
 - Event key: ${eventKey}
 - Team number: ${Math.trunc(teamNumber)}
 
 Input notes (already grouped):
-- Offense notes: ${JSON.stringify(offenseNotes)}
+- Auton notes: ${JSON.stringify(autonNotes)}
 - Defense notes: ${JSON.stringify(defenseNotes)}
 - General notes: ${JSON.stringify(generalNotes)}
 
 Return ONLY valid JSON with this exact schema:
 {
-  "offense": "string",
-  "defense": "string",
-  "general": "string"
+  "autonStrategy": "string",
+  "defenseStrategy": "string",
+  "overallSummary": "string"
 }
 
 Rules:
-1. Always include all three keys: offense, defense, general.
-2. Keep each section to 1-3 short sentences.
-3. If a section has little/no signal, say that clearly in that section.
-4. Do not mention that you are an AI or that data is missing globally.
-5. Do not output markdown.
+1. Always include all three keys: autonStrategy, defenseStrategy, overallSummary.
+2. For autonStrategy and defenseStrategy:
+   - If multiple distinct strategies appear, output a numbered list in plain text:
+     "1) <strategy> (confidence: high|medium|low)\n2) <strategy> (confidence: high|medium|low)"
+   - If only one strategy appears, write exactly one numbered line in that same format.
+   - Keep each strategy line concise and specific.
+3. For overallSummary, provide 1-3 short sentences describing important cross-match context.
+4. If a section has little/no signal, explicitly say that in that section.
+5. Do not mention that you are an AI.
+6. Do not output markdown.
 `;
 
   try {
@@ -85,15 +90,15 @@ Rules:
     const parsed = JSON.parse(text);
 
     return res.status(200).json({
-      offense: typeof parsed?.offense === 'string' && parsed.offense.trim()
-        ? parsed.offense.trim()
-        : 'No clear offense trend was found in these notes.',
-      defense: typeof parsed?.defense === 'string' && parsed.defense.trim()
-        ? parsed.defense.trim()
-        : 'No clear defense trend was found in these notes.',
-      general: typeof parsed?.general === 'string' && parsed.general.trim()
-        ? parsed.general.trim()
-        : 'No clear general trend was found in these notes.',
+      autonStrategy: typeof parsed?.autonStrategy === 'string' && parsed.autonStrategy.trim()
+        ? parsed.autonStrategy.trim()
+        : '1) No clear autonomous strategy trend was found in these notes. (confidence: low)',
+      defenseStrategy: typeof parsed?.defenseStrategy === 'string' && parsed.defenseStrategy.trim()
+        ? parsed.defenseStrategy.trim()
+        : '1) No clear defense strategy trend was found in these notes. (confidence: low)',
+      overallSummary: typeof parsed?.overallSummary === 'string' && parsed.overallSummary.trim()
+        ? parsed.overallSummary.trim()
+        : 'No clear cross-match context was found in these notes.',
     });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to summarize match notes' });
