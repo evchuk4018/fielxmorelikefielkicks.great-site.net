@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { normalizeEmbedding, normalizePhotoUrls } from './_utils.js';
+import { normalizeEmbedding, normalizePhotoUrls } from '../../lib/faceid-server-utils.js';
 
 function createEnrollmentId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

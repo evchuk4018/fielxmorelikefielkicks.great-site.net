@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { euclideanDistance, normalizeEmbedding } from './_utils.js';
+import { euclideanDistance, normalizeEmbedding } from '../../lib/faceid-server-utils.js';
 
 const DEFAULT_THRESHOLD = 0.55;
 

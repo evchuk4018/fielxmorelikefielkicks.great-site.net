@@ -1,12 +1,43 @@
 import { storage } from './storage';
 import { CompetitionProfile, TBATeam, TBAEvent } from '../types';
 
-const PROFILES_KEY = 'competitionProfiles';
-const ACTIVE_PROFILE_ID_KEY = 'activeCompetitionProfileId';
+const PROFILES_KEY = 'global:competitionProfiles';
+const ACTIVE_PROFILE_ID_KEY = 'global:activeCompetitionProfileId';
+const LEGACY_PROFILES_KEY = 'competitionProfiles';
+const LEGACY_ACTIVE_PROFILE_ID_KEY = 'activeCompetitionProfileId';
 
 function getProfileTeamsKey(profileId: string) {
+  return `global:competitionProfileTeams:${profileId}`;
+}
+
+function getLegacyProfileTeamsKey(profileId: string) {
   return `competitionProfileTeams:${profileId}`;
 }
+
+function migrateLegacyProfileState(): void {
+  const legacyProfiles = storage.get<CompetitionProfile[]>(LEGACY_PROFILES_KEY);
+  if (legacyProfiles && !storage.get<CompetitionProfile[]>(PROFILES_KEY)) {
+    storage.set(PROFILES_KEY, legacyProfiles);
+  }
+
+  const legacyActiveId = storage.get<string | null>(LEGACY_ACTIVE_PROFILE_ID_KEY);
+  if (legacyActiveId && !storage.get<string | null>(ACTIVE_PROFILE_ID_KEY)) {
+    storage.set(ACTIVE_PROFILE_ID_KEY, legacyActiveId);
+  }
+
+  const profiles = storage.get<CompetitionProfile[]>(PROFILES_KEY) || [];
+  for (const profile of profiles) {
+    const globalTeamsKey = getProfileTeamsKey(profile.id);
+    if (!storage.get<TBATeam[]>(globalTeamsKey)) {
+      const legacyTeams = storage.get<TBATeam[]>(getLegacyProfileTeamsKey(profile.id));
+      if (legacyTeams) {
+        storage.set(globalTeamsKey, legacyTeams);
+      }
+    }
+  }
+}
+
+migrateLegacyProfileState();
 
 function buildLocation(eventInfo: TBAEvent | null): string {
   if (!eventInfo) {
