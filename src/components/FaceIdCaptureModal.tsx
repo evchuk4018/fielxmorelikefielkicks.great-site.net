@@ -7,9 +7,9 @@ const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 const TRAIN_SECONDS = 10;
 const TEST_SECONDS = 3;
 const SAMPLE_INTERVAL_MS = 150;
-const MIN_TRAIN_FRAMES = 20;
-const MIN_TEST_FRAMES = 6;
-const MAX_MEAN_DESCRIPTOR_DISTANCE = 0.46;
+const MIN_TRAIN_FRAMES = 12;
+const MIN_TEST_FRAMES = 4;
+const MAX_MEAN_DESCRIPTOR_DISTANCE = 0.62;
 
 type FaceIdMode = 'train' | 'test';
 
@@ -115,8 +115,10 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(mode === 'train' ? TRAIN_SECONDS : TEST_SECONDS);
-  const [sampleAttempts, setSampleAttempts] = useState(0);
+  const [processedFrames, setProcessedFrames] = useState(0);
   const [acceptedFrames, setAcceptedFrames] = useState(0);
+  const [rejectedNoFace, setRejectedNoFace] = useState(0);
+  const [rejectedCoverage, setRejectedCoverage] = useState(0);
   const [status, setStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -134,8 +136,10 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
     setIsPreparing(false);
     setIsRunning(false);
     setIsSubmitting(false);
-    setSampleAttempts(0);
+    setProcessedFrames(0);
     setAcceptedFrames(0);
+    setRejectedNoFace(0);
+    setRejectedCoverage(0);
     setSecondsLeft(runSeconds);
     setStatus('');
     setErrorMessage('');
@@ -200,11 +204,13 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
 
     samplingInFlightRef.current = true;
     try {
+      setProcessedFrames((count) => count + 1);
+
       let detection: any = null;
 
       try {
         detection = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.7 }))
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
       } catch {
@@ -212,6 +218,7 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
       }
 
       if (!detection?.descriptor) {
+        setRejectedNoFace((count) => count + 1);
         return;
       }
 
@@ -224,7 +231,8 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
         : 0;
       const faceCoverage = frameArea > 0 ? boxArea / frameArea : 0;
 
-      if (faceCoverage < 0.08 || faceCoverage > 0.7) {
+      if (faceCoverage < 0.04 || faceCoverage > 0.8) {
+        setRejectedCoverage((count) => count + 1);
         return;
       }
 
@@ -248,8 +256,10 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
   async function startCapture() {
     setErrorMessage('');
     setStatus('Preparing camera...');
-    setSampleAttempts(0);
+    setProcessedFrames(0);
     setAcceptedFrames(0);
+    setRejectedNoFace(0);
+    setRejectedCoverage(0);
     setSecondsLeft(runSeconds);
     setIsPreparing(true);
 
@@ -285,7 +295,6 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
       const startedAt = Date.now();
 
       sampleRef.current = window.setInterval(() => {
-        setSampleAttempts((count) => count + 1);
         void sampleFrame(descriptors, snapshots);
       }, SAMPLE_INTERVAL_MS);
 
@@ -427,8 +436,10 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
 
               <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-slate-300 flex flex-wrap gap-4">
                 <span>Time Left: <strong className="text-white">{secondsLeft}s</strong></span>
-                <span>Sample Attempts: <strong className="text-white">{sampleAttempts}</strong></span>
+                <span>Processed Frames: <strong className="text-white">{processedFrames}</strong></span>
                 <span>Accepted Frames: <strong className="text-white">{acceptedFrames}</strong></span>
+                <span>No Face: <strong className="text-white">{rejectedNoFace}</strong></span>
+                <span>Coverage Rejects: <strong className="text-white">{rejectedCoverage}</strong></span>
                 {status && <span className="text-blue-300">{status}</span>}
               </div>
 
