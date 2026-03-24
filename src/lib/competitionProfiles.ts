@@ -1,4 +1,5 @@
 import { storage } from './storage';
+import { supabase } from './supabase';
 import { CompetitionProfile, TBATeam, TBAEvent } from '../types';
 
 const PROFILES_KEY = 'global:competitionProfiles';
@@ -38,6 +39,94 @@ function migrateLegacyProfileState(): void {
 }
 
 migrateLegacyProfileState();
+
+type CompetitionProfileRow = {
+  id: string;
+  event_key: string;
+  name: string;
+  location: string | null;
+  year: number | null;
+  team_count: number;
+  teams: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+function normalizeTeams(value: unknown): TBATeam[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((team): team is TBATeam => {
+    if (!team || typeof team !== 'object') {
+      return false;
+    }
+
+    const candidate = team as Record<string, unknown>;
+    return typeof candidate.key === 'string' && typeof candidate.team_number === 'number';
+  });
+}
+
+function rowToProfile(row: CompetitionProfileRow): CompetitionProfile {
+  return {
+    id: row.id,
+    eventKey: row.event_key,
+    name: row.name,
+    location: row.location || 'Unknown location',
+    year: row.year || undefined,
+    teamCount: row.team_count,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+function profileToRow(profile: CompetitionProfile, teams: TBATeam[]): {
+  id: string;
+  event_key: string;
+  name: string;
+  location: string;
+  year: number | null;
+  team_count: number;
+  teams: TBATeam[];
+  created_at: string;
+  updated_at: string;
+} {
+  return {
+    id: profile.id,
+    event_key: profile.eventKey,
+    name: profile.name,
+    location: profile.location,
+    year: profile.year || null,
+    team_count: profile.teamCount,
+    teams,
+    created_at: new Date(profile.createdAt).toISOString(),
+    updated_at: new Date(profile.updatedAt).toISOString(),
+  };
+}
+
+export async function hydrateProfilesFromSupabase(): Promise<void> {
+  const { data, error } = await supabase
+    .from('competition_profiles')
+    .select('id, event_key, name, location, year, team_count, teams, created_at, updated_at')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to load competition profiles');
+  }
+
+  const rows = (data || []) as CompetitionProfileRow[];
+  const profiles = rows.map(rowToProfile);
+  saveProfiles(profiles);
+
+  rows.forEach((row) => {
+    setProfileTeams(row.id, normalizeTeams(row.teams));
+  });
+
+  const activeId = getActiveProfileId();
+  if (activeId && !profiles.some((profile) => profile.id === activeId)) {
+    clearActiveProfile();
+  }
+}
 
 function buildLocation(eventInfo: TBAEvent | null): string {
   if (!eventInfo) {
@@ -89,11 +178,11 @@ export function getProfileByEventKey(eventKey: string): CompetitionProfile | nul
   return getProfiles().find((profile) => profile.eventKey.toLowerCase() === normalizedKey) || null;
 }
 
-export function createProfile(params: {
+export async function createProfile(params: {
   eventKey: string;
   eventInfo: TBAEvent | null;
   teams: TBATeam[];
-}): CompetitionProfile {
+}): Promise<CompetitionProfile> {
   const now = Date.now();
   const eventKey = params.eventKey.trim().toLowerCase();
   const existing = getProfileByEventKey(eventKey);
@@ -114,6 +203,15 @@ export function createProfile(params: {
 
     saveProfiles(profiles);
     setProfileTeams(updatedProfile.id, params.teams);
+
+    const { error } = await supabase
+      .from('competition_profiles')
+      .upsert(profileToRow(updatedProfile, params.teams), { onConflict: 'event_key' });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to save competition profile');
+    }
+
     setActiveProfileId(updatedProfile.id);
     return updatedProfile;
   }
@@ -132,6 +230,15 @@ export function createProfile(params: {
   const profiles = getProfiles();
   saveProfiles([profile, ...profiles]);
   setProfileTeams(profile.id, params.teams);
+
+  const { error } = await supabase
+    .from('competition_profiles')
+    .upsert(profileToRow(profile, params.teams), { onConflict: 'event_key' });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to save competition profile');
+  }
+
   setActiveProfileId(profile.id);
   return profile;
 }

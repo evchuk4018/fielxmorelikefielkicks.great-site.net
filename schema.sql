@@ -65,6 +65,18 @@ create table if not exists public.face_id_enrollments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.competition_profiles (
+  id text primary key,
+  event_key text not null unique,
+  name text not null,
+  location text,
+  year integer,
+  team_count integer not null default 0,
+  teams jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 alter table public.match_scouts
 add column if not exists previous_team_ranking text;
 
@@ -81,6 +93,8 @@ create index if not exists idx_face_id_enrollments_created_at on public.face_id_
 create index if not exists idx_face_id_enrollments_event_key on public.face_id_enrollments (event_key);
 create index if not exists idx_face_id_enrollments_profile_id on public.face_id_enrollments (profile_id);
 create index if not exists idx_face_id_enrollments_person_name on public.face_id_enrollments (person_name);
+create index if not exists idx_competition_profiles_updated_at on public.competition_profiles (updated_at desc);
+create index if not exists idx_competition_profiles_created_at on public.competition_profiles (created_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -110,9 +124,16 @@ before update on public.face_id_enrollments
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_competition_profiles_updated_at on public.competition_profiles;
+create trigger set_competition_profiles_updated_at
+before update on public.competition_profiles
+for each row
+execute function public.set_updated_at();
+
 alter table public.pit_scouts enable row level security;
 alter table public.match_scouts enable row level security;
 alter table public.face_id_enrollments enable row level security;
+alter table public.competition_profiles enable row level security;
 
 -- Service-role requests bypass RLS in Supabase, but explicit policies are included
 -- so this schema remains predictable when roles are customized.
@@ -135,6 +156,14 @@ with check (true);
 drop policy if exists "service_role_full_face_id_enrollments" on public.face_id_enrollments;
 create policy "service_role_full_face_id_enrollments"
 on public.face_id_enrollments
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists "service_role_full_competition_profiles" on public.competition_profiles;
+create policy "service_role_full_competition_profiles"
+on public.competition_profiles
 for all
 to service_role
 using (true)
@@ -185,6 +214,22 @@ with check (true);
 drop policy if exists "anon_rw_face_id_enrollments" on public.face_id_enrollments;
 create policy "anon_rw_face_id_enrollments"
 on public.face_id_enrollments
+for all
+to anon
+using (true)
+with check (true);
+
+drop policy if exists "authenticated_rw_competition_profiles" on public.competition_profiles;
+create policy "authenticated_rw_competition_profiles"
+on public.competition_profiles
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_competition_profiles" on public.competition_profiles;
+create policy "anon_rw_competition_profiles"
+on public.competition_profiles
 for all
 to anon
 using (true)

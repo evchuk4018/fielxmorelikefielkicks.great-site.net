@@ -15,6 +15,7 @@ import {
   getActiveProfile,
   createProfile,
   setActiveProfileId,
+  hydrateProfilesFromSupabase,
 } from './lib/competitionProfiles';
 import { tba } from './lib/tba';
 import { uploadFaceIdSnapshot } from './lib/supabase';
@@ -32,6 +33,7 @@ export default function App() {
   const [profiles, setProfiles] = useState<CompetitionProfile[]>([]);
   const [activeProfile, setActiveProfile] = useState<CompetitionProfile | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [faceIdMode, setFaceIdMode] = useState<FaceIdMode | null>(null);
   const [isFaceIdBusy, setIsFaceIdBusy] = useState(false);
 
@@ -41,16 +43,46 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const loadedProfiles = getProfiles();
-    const loadedActiveProfile = getActiveProfile();
+    let isCancelled = false;
 
-    setProfiles(loadedProfiles);
-    setActiveProfile(loadedActiveProfile);
+    const loadProfiles = async () => {
+      const cachedProfiles = getProfiles();
+      const cachedActiveProfile = getActiveProfile();
 
-    if (loadedActiveProfile) {
-      // Keep legacy keys in sync so existing tabs and storage-backed flows keep working.
-      setActiveProfileId(loadedActiveProfile.id);
-    }
+      if (!isCancelled) {
+        setProfiles(cachedProfiles);
+        setActiveProfile(cachedActiveProfile);
+      }
+
+      try {
+        await hydrateProfilesFromSupabase();
+      } catch (error) {
+        console.error('Failed to hydrate profiles from Supabase:', error);
+      }
+
+      if (isCancelled) {
+        return;
+      }
+
+      const loadedProfiles = getProfiles();
+      const loadedActiveProfile = getActiveProfile();
+
+      setProfiles(loadedProfiles);
+      setActiveProfile(loadedActiveProfile);
+
+      if (loadedActiveProfile) {
+        // Keep legacy keys in sync so existing tabs and storage-backed flows keep working.
+        setActiveProfileId(loadedActiveProfile.id);
+      }
+
+      setIsLoadingProfiles(false);
+    };
+
+    void loadProfiles();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const refreshProfiles = () => {
@@ -84,7 +116,7 @@ export default function App() {
         tba.fetchEvent(eventKey).catch(() => null as TBAEvent | null),
       ]);
 
-      createProfile({ eventKey, eventInfo, teams });
+      await createProfile({ eventKey, eventInfo, teams });
       refreshProfiles();
       setLocation('event');
       setActiveTab('pit');
@@ -97,6 +129,14 @@ export default function App() {
   };
 
   const renderPage = () => {
+    if (isLoadingProfiles) {
+      return (
+        <div className="max-w-5xl mx-auto rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-slate-300">
+          Loading competition profiles...
+        </div>
+      );
+    }
+
     if (location === 'home') {
       return (
         <Home
