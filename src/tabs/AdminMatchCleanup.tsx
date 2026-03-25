@@ -75,7 +75,11 @@ function trimText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function AdminMatchCleanup() {
+type Props = {
+  eventKey: string;
+};
+
+export function AdminMatchCleanup({ eventKey }: Props) {
   const [rows, setRows] = useState<MatchScoutRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -85,6 +89,7 @@ export function AdminMatchCleanup() {
     setIsLoading(true);
 
     try {
+      const normalizedEventKey = eventKey.trim().toLowerCase();
       const localRows = storage
         .getAllKeys()
         .filter((key) => key.startsWith('matchScout:'))
@@ -92,6 +97,10 @@ export function AdminMatchCleanup() {
         .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
         .map(({ key, record }) => {
           const payload = asMatchPayload(record.data);
+          const rowEventKey = trimText(payload.eventKey).toLowerCase();
+          if (!normalizedEventKey || rowEventKey !== normalizedEventKey) {
+            return null;
+          }
           const validated = Boolean(payload.validated);
           if (validated) {
             return null;
@@ -125,6 +134,10 @@ export function AdminMatchCleanup() {
 
       const remoteRows: MatchScoutRow[] = ((data || []) as SupabaseMatchRow[]).map((row) => {
         const payload = asMatchPayload(normalizePayload(row.data));
+        const rowEventKey = trimText(payload.eventKey).toLowerCase();
+        if (!normalizedEventKey || rowEventKey !== normalizedEventKey) {
+          return null;
+        }
         const notes = [trimText(payload.autonNotes), trimText(payload.defenseNotes), trimText(payload.notes)]
           .filter(Boolean)
           .join(' | ');
@@ -140,7 +153,7 @@ export function AdminMatchCleanup() {
           validated: Boolean(row.validated ?? payload.validated),
           source: 'remote',
         };
-      });
+      }).filter((row): row is MatchScoutRow => row !== null);
 
       const merged = new Map<string, MatchScoutRow>();
       [...localRows, ...remoteRows].forEach((row) => {
@@ -158,7 +171,7 @@ export function AdminMatchCleanup() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [eventKey]);
 
   useEffect(() => {
     void loadRows();
@@ -249,7 +262,7 @@ export function AdminMatchCleanup() {
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-bold text-white">Admin Match Cleanup</h2>
           <p className="text-sm text-slate-300">
-            Review pending match scouting records. Checkmark validates and hides the record, X deletes junk.
+            Review pending match scouting records for this event. Checkmark validates and hides the record, X deletes junk.
           </p>
         </div>
 

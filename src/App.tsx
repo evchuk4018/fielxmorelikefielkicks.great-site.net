@@ -616,7 +616,11 @@ export default function App() {
       case 'raw':
         return <RawData eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       case 'admin':
-        return signedInUserProfile ? <AdminMatchCleanup /> : <PitScouting activeProfile={activeProfile} />;
+        return signedInUserProfile ? (
+          <AdminMatchCleanup eventKey={activeProfile?.eventKey || ''} />
+        ) : (
+          <PitScouting activeProfile={activeProfile} />
+        );
       default:
         return <PitScouting activeProfile={activeProfile} />;
     }
