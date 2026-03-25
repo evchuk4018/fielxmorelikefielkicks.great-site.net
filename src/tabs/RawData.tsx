@@ -218,7 +218,7 @@ function buildReplayPath(points: NormalizedPoint[], shots: NormalizedPoint[]): A
     return null;
   }
 
-  const durationMs = 15000;
+  const durationMs = 20000;
   const trajectoryPoints = points.map((point, index) => ({
     x: point.x,
     y: point.y,
@@ -246,9 +246,10 @@ function alignPointToAlliance(point: NormalizedPoint, sourceAlliance: 'Red' | 'B
     return point;
   }
 
+  // Normalize opposite-alliance recordings into the same red-oriented frame.
   return {
     x: 1 - point.x,
-    y: point.y,
+    y: 1 - point.y,
   };
 }
 

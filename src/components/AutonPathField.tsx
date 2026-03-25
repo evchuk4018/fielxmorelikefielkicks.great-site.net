@@ -131,7 +131,7 @@ export function AutonPathField({
   allianceColor,
   value = null,
   onChange,
-  durationMs = 15000,
+  durationMs = 20000,
   instanceId,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -675,7 +675,7 @@ export function AutonPathField({
 
       {mode === 'record' && phase === 'recording' && (
         <p className="text-xs text-blue-300">
-          Recording is active. Drag the robot across the map. Capture stops automatically at 15 seconds.
+          Recording is active. Drag the robot across the map. Capture stops automatically at 20 seconds.
         </p>
       )}
 
