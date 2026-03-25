@@ -52,6 +52,19 @@ create table if not exists public.match_scouts (
   constraint match_scouts_alliance_check check (alliance is null or alliance in ('Red', 'Blue'))
 );
 
+-- Autonomous path capture is stored inside match_scouts.data JSONB as data.autonPath.
+-- Expected shape:
+-- {
+--   "startSlot": "R1" | "R2" | "R3" | "B1" | "B2" | "B3",
+--   "capturedAt": "ISO-8601 timestamp",
+--   "durationMs": 15000,
+--   "trajectoryPoints": [{ "x": 0.08, "y": 0.34, "timestampMs": 0 }],
+--   "shotAttempts": [{ "x": 0.45, "y": 0.52, "timestampMs": 8200 }],
+--   "fieldVersion": "2026-field-v1"
+-- }
+-- Optional index for heavy auton replay analytics:
+-- create index if not exists idx_match_scouts_auton_path on public.match_scouts using gin ((data -> 'autonPath'));
+
 create table if not exists public.face_id_enrollments (
   id text primary key,
   person_name text not null,

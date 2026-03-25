@@ -9,6 +9,28 @@ export type ShooterType = 'Single shooter' | 'Multi-shooter';
 export type HubScoringStrategy = 'Prioritized scoring when Hub active' | 'Scored regardless of Hub state' | 'Primarily collected/fed Human Player';
 export type CardReceived = 'None' | 'Yellow' | 'Red';
 export type DefenseQuality = 'Good' | 'Bad';
+export type AutonStartSlot = 'R1' | 'R2' | 'R3' | 'B1' | 'B2' | 'B3';
+
+export interface AutonTrajectoryPoint {
+  x: number;
+  y: number;
+  timestampMs: number;
+}
+
+export interface AutonShotAttempt {
+  x: number;
+  y: number;
+  timestampMs: number;
+}
+
+export interface AutonPathData {
+  startSlot: AutonStartSlot;
+  capturedAt: string;
+  durationMs: number;
+  trajectoryPoints: AutonTrajectoryPoint[];
+  shotAttempts: AutonShotAttempt[];
+  fieldVersion: '2026-field-v1';
+}
 
 export interface PitScoutData {
   eventKey?: string;
@@ -51,6 +73,7 @@ export interface MatchScoutData {
   autoFuelScored: number;
   autoClimbAttempted: boolean;
   autoClimbResult?: AutoClimbResult;
+  autonPath?: AutonPathData | null;
 
   // Teleop
   teleopFuelScored: number;

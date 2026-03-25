@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { tba } from '../lib/tba';
 import { storage } from '../lib/storage';
 import { listAssignmentsForScout, markAssignmentCompleted } from '../lib/supabase';
-import { CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
+import { AutonPathData, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
 import { Toggle, MultiToggle } from '../components/Toggle';
+import { AutonPathField } from '../components/AutonPathField';
 import { showToast } from '../components/Toast';
 import { Save } from 'lucide-react';
 
@@ -19,6 +20,7 @@ interface EventMatchScoutData extends MatchScoutData {
 
 const EMPTY_FORM = {
   autonNotes: '',
+  autonPath: null as AutonPathData | null,
   playedDefense: false,
   defenseQuality: '' as DefenseQuality | '',
   defenseNotes: '',
@@ -64,16 +66,17 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   const [error, setError] = useState<string | null>(null);
 
   const [autonNotes, setAutonNotes] = useState('');
+  const [autonPath, setAutonPath] = useState<AutonPathData | null>(null);
   const [playedDefense, setPlayedDefense] = useState(false);
   const [defenseQuality, setDefenseQuality] = useState<DefenseQuality | ''>('');
   const [defenseNotes, setDefenseNotes] = useState('');
   const [notes, setNotes] = useState('');
 
   // Use a ref so autoSave can always access current form values without stale closures
-  const formRef = useRef({ autonNotes, playedDefense, defenseQuality, defenseNotes, notes });
+  const formRef = useRef({ autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes });
   useEffect(() => {
-    formRef.current = { autonNotes, playedDefense, defenseQuality, defenseNotes, notes };
-  });
+    formRef.current = { autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes };
+  }, [autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes]);
 
   useEffect(() => {
     if (!activeProfile) {
@@ -242,6 +245,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   useEffect(() => {
     setSelectedTeamNumber('');
     setAutonNotes('');
+    setAutonPath(null);
     setPlayedDefense(false);
     setDefenseQuality('');
     setDefenseNotes('');
@@ -252,6 +256,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   useEffect(() => {
     if (!selectedMatch || selectedTeamNumber === '') {
       setAutonNotes('');
+      setAutonPath(null);
       setPlayedDefense(false);
       setDefenseQuality('');
       setDefenseNotes('');
@@ -264,12 +269,14 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     if (saved?.data) {
       const d = saved.data;
       setAutonNotes(d.autonNotes || '');
+      setAutonPath(d.autonPath || null);
       setPlayedDefense(d.playedDefense || false);
       setDefenseQuality(d.defenseQuality || '');
       setDefenseNotes(d.defenseNotes || '');
       setNotes(d.notes || '');
     } else {
       setAutonNotes('');
+      setAutonPath(null);
       setPlayedDefense(false);
       setDefenseQuality('');
       setDefenseNotes('');
@@ -360,6 +367,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     );
     setSelectedTeamNumber('');
     setAutonNotes('');
+    setAutonPath(null);
     setPlayedDefense(false);
     setDefenseQuality('');
     setDefenseNotes('');
@@ -472,6 +480,16 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
         }`}
       >
         <h2 className="text-2xl font-bold text-white">Autonomous</h2>
+
+        <AutonPathField
+          mode="record"
+          allianceColor={getAllianceColor()}
+          value={autonPath}
+          onChange={(next) => {
+            setAutonPath(next);
+            persist({ autonPath: next });
+          }}
+        />
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">

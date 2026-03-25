@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
-import { MatchScoutData, PitScoutData, SyncRecord } from '../types';
+import { AutonPathData, MatchScoutData, PitScoutData, SyncRecord } from '../types';
 import { gemini, MatchNoteSummary } from '../lib/gemini';
 import { statbotics, StatboticsTeamEvent } from '../lib/statbotics';
 import { getProfileTeams } from '../lib/competitionProfiles';
+import { AutonPathField } from '../components/AutonPathField';
 
 type RawEntryType = 'pit' | 'match';
 
@@ -202,6 +203,44 @@ function asMatchPayload(value: unknown): Partial<MatchScoutData> | null {
   return value as Partial<MatchScoutData>;
 }
 
+function asAutonPathData(value: unknown): AutonPathData | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const startSlot = value.startSlot;
+  const durationMs = value.durationMs;
+  const trajectoryPoints = value.trajectoryPoints;
+  const shotAttempts = value.shotAttempts;
+
+  if (typeof startSlot !== 'string' || typeof durationMs !== 'number' || !Array.isArray(trajectoryPoints) || !Array.isArray(shotAttempts)) {
+    return null;
+  }
+
+  return {
+    startSlot: startSlot as AutonPathData['startSlot'],
+    capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : new Date(0).toISOString(),
+    durationMs,
+    trajectoryPoints: trajectoryPoints
+      .filter((point) => isRecord(point))
+      .map((point) => ({
+        x: Number(point.x),
+        y: Number(point.y),
+        timestampMs: Number(point.timestampMs),
+      }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.timestampMs)),
+    shotAttempts: shotAttempts
+      .filter((shot) => isRecord(shot))
+      .map((shot) => ({
+        x: Number(shot.x),
+        y: Number(shot.y),
+        timestampMs: Number(shot.timestampMs),
+      }))
+      .filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y) && Number.isFinite(shot.timestampMs)),
+    fieldVersion: value.fieldVersion === '2026-field-v1' ? '2026-field-v1' : '2026-field-v1',
+  };
+}
+
 function displayText(value: unknown, fallback = 'Not set'): string {
   if (value === null || value === undefined || value === '') {
     return fallback;
@@ -349,9 +388,10 @@ type RawDataProps = {
   profileId: string | null;
   embeddedTeamNumber?: number | null;
   hideTeamList?: boolean;
+  includeAutonPathViewer?: boolean;
 };
 
-export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTeamList = false }: RawDataProps) {
+export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTeamList = false, includeAutonPathViewer = true }: RawDataProps) {
   const [entries, setEntries] = useState<RawEntry[]>([]);
   const [eventTeams, setEventTeams] = useState<EventTeam[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
@@ -364,6 +404,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
   const [noteSummary, setNoteSummary] = useState<MatchNoteSummary | null>(null);
   const [isLoadingNoteSummary, setIsLoadingNoteSummary] = useState(false);
   const [noteSummaryError, setNoteSummaryError] = useState<string | null>(null);
+  const [selectedAutonReplayKey, setSelectedAutonReplayKey] = useState<string>('');
   const [visibleMetrics, setVisibleMetrics] = useState<Record<MetricKey, boolean>>({
     total_points: true,
     auto_points: true,
@@ -717,6 +758,45 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     [selectedTeamScouting.match],
   );
 
+  const selectedTeamAutonPaths = useMemo(() => {
+    return selectedTeamScouting.match
+      .map((entry) => {
+        const match = asMatchPayload(entry.payload);
+        const autonPath = asAutonPathData(match?.autonPath);
+        if (!match || !autonPath || autonPath.trajectoryPoints.length === 0) {
+          return null;
+        }
+
+        return {
+          key: entry.key,
+          matchNumber: typeof match.matchNumber === 'number' ? match.matchNumber : Number(match.matchNumber) || 0,
+          allianceColor: match.allianceColor === 'Red' || match.allianceColor === 'Blue' ? match.allianceColor : '',
+          updatedAt: entry.updatedAt,
+          path: autonPath,
+        };
+      })
+      .filter((entry): entry is { key: string; matchNumber: number; allianceColor: 'Red' | 'Blue' | ''; updatedAt: number; path: AutonPathData } => entry !== null)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [selectedTeamScouting.match]);
+
+  useEffect(() => {
+    if (selectedTeamAutonPaths.length === 0) {
+      setSelectedAutonReplayKey('');
+      return;
+    }
+
+    if (!selectedTeamAutonPaths.some((entry) => entry.key === selectedAutonReplayKey)) {
+      setSelectedAutonReplayKey(selectedTeamAutonPaths[0].key);
+    }
+  }, [selectedAutonReplayKey, selectedTeamAutonPaths]);
+
+  const selectedAutonReplay = useMemo(() => {
+    if (!selectedAutonReplayKey) {
+      return null;
+    }
+    return selectedTeamAutonPaths.find((entry) => entry.key === selectedAutonReplayKey) || null;
+  }, [selectedAutonReplayKey, selectedTeamAutonPaths]);
+
   useEffect(() => {
     if (!selectedTeam || !eventKey) {
       setNoteSummary(null);
@@ -1010,7 +1090,39 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                 <div className="mt-4 text-sm text-slate-300 flex flex-wrap gap-4">
                   <span>Pit records: {selectedTeamScouting.pit.length}</span>
                   <span>Match records: {selectedTeamScouting.match.length}</span>
+                  <span>Auton paths: {selectedTeamAutonPaths.length}</span>
                 </div>
+
+                {includeAutonPathViewer && selectedTeamAutonPaths.length > 0 && (
+                  <div className="mt-4">
+                    <SectionCard title="Autonomous Path Replay">
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <label className="block text-xs text-slate-400">Select match replay</label>
+                          <select
+                            value={selectedAutonReplayKey}
+                            onChange={(event) => setSelectedAutonReplayKey(event.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100"
+                          >
+                            {selectedTeamAutonPaths.map((entry) => (
+                              <option key={entry.key} value={entry.key}>
+                                Match {entry.matchNumber} ({entry.allianceColor || 'Unknown alliance'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {selectedAutonReplay && (
+                          <AutonPathField
+                            mode="replay"
+                            allianceColor={selectedAutonReplay.allianceColor}
+                            value={selectedAutonReplay.path}
+                          />
+                        )}
+                      </div>
+                    </SectionCard>
+                  </div>
+                )}
 
                 <div className="mt-4 space-y-3">
                   {selectedTeamScouting.pit.length === 0 && selectedTeamScouting.match.length === 0 && (
