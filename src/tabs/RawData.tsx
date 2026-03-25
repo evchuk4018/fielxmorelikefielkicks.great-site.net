@@ -70,6 +70,13 @@ type StripSummary = {
   maxShotBin: number;
 };
 
+type StripRunSample = {
+  trajectory: NormalizedPoint[];
+  shots: NormalizedPoint[];
+  start: NormalizedPoint;
+  alliance: 'Red' | 'Blue' | '';
+};
+
 const AUTON_FIELD_WIDTH = 1000;
 const AUTON_FIELD_HEIGHT = 540;
 const AUTON_FIELD_OVERLAY_SRC = '/auton-field-overlay.svg';
@@ -231,6 +238,38 @@ function buildReplayPath(points: NormalizedPoint[], shots: NormalizedPoint[]): A
     trajectoryPoints,
     shotAttempts,
     fieldVersion: '2026-field-v1',
+  };
+}
+
+function alignPointToAlliance(point: NormalizedPoint, sourceAlliance: 'Red' | 'Blue' | '', targetAlliance: 'Red' | 'Blue' | ''): NormalizedPoint {
+  if (!sourceAlliance || !targetAlliance || sourceAlliance === targetAlliance) {
+    return point;
+  }
+
+  return {
+    x: 1 - point.x,
+    y: point.y,
+  };
+}
+
+function averagePoint(points: NormalizedPoint[]): NormalizedPoint {
+  if (points.length === 0) {
+    return { x: 0.5, y: 0.5 };
+  }
+
+  const sum = points.reduce(
+    (acc, point) => {
+      return {
+        x: acc.x + point.x,
+        y: acc.y + point.y,
+      };
+    },
+    { x: 0, y: 0 },
+  );
+
+  return {
+    x: sum.x / points.length,
+    y: sum.y / points.length,
   };
 }
 
@@ -981,13 +1020,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
   }, [selectedTeamScouting.match]);
 
   const stripSummaries = useMemo(() => {
-    const groupedRuns: Record<StripKey, NormalizedPoint[][]> = {
-      top: [],
-      middle: [],
-      bottom: [],
-    };
-
-    const groupedShots: Record<StripKey, NormalizedPoint[]> = {
+    const groupedRuns: Record<StripKey, StripRunSample[]> = {
       top: [],
       middle: [],
       bottom: [],
@@ -1007,7 +1040,14 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
       if (normalizedTrajectory.length > 0) {
-        groupedRuns[strip].push(resampleTrajectory(normalizedTrajectory, PATH_SAMPLE_COUNT));
+        groupedRuns[strip].push({
+          trajectory: resampleTrajectory(normalizedTrajectory, PATH_SAMPLE_COUNT),
+          shots: entry.path.shotAttempts
+            .map((shot) => normalizePoint({ x: shot.x, y: shot.y }))
+            .filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y)),
+          start: normalizePoint({ x: entry.path.startPosition.x, y: entry.path.startPosition.y }),
+          alliance: entry.allianceColor,
+        });
       }
 
       if (entry.allianceColor === 'Red') {
@@ -1017,18 +1057,10 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
         groupedAllianceCounts[strip].blue += 1;
       }
 
-      const normalizedShots = entry.path.shotAttempts
-        .map((shot) => normalizePoint({ x: shot.x, y: shot.y }))
-        .filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y));
-
-      groupedShots[strip].push(...normalizedShots);
     });
 
     return STRIP_ORDER.map((stripConfig) => {
       const runs = groupedRuns[stripConfig.key];
-      const shots = groupedShots[stripConfig.key];
-      const shotBins = buildHeatmapBins(shots, HEATMAP_COLS, HEATMAP_ROWS);
-      const avgPath = averageResampledPaths(runs);
       const allianceCounts = groupedAllianceCounts[stripConfig.key];
       const dominantAlliance = allianceCounts.red === allianceCounts.blue
         ? ''
@@ -1036,14 +1068,33 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
           ? 'Red'
           : 'Blue';
 
+      const targetAlliance: 'Red' | 'Blue' | '' = dominantAlliance || (runs[0]?.alliance || '');
+
+      const alignedRuns = runs.map((run) => {
+        return {
+          start: alignPointToAlliance(run.start, run.alliance, targetAlliance),
+          trajectory: run.trajectory.map((point) => alignPointToAlliance(point, run.alliance, targetAlliance)),
+          shots: run.shots.map((shot) => alignPointToAlliance(shot, run.alliance, targetAlliance)),
+        };
+      });
+
+      const avgStart = averagePoint(alignedRuns.map((run) => run.start));
+      const avgPath = averageResampledPaths(alignedRuns.map((run) => run.trajectory));
+      if (avgPath.length > 0) {
+        avgPath[0] = avgStart;
+      }
+
+      const allShots = alignedRuns.flatMap((run) => run.shots);
+      const shotBins = buildHeatmapBins(allShots, HEATMAP_COLS, HEATMAP_ROWS);
+
       return {
         key: stripConfig.key,
         label: stripConfig.label,
         runCount: runs.length,
-        totalShots: shots.length,
+        totalShots: allShots.length,
         avgPath,
-        replayPath: buildReplayPath(avgPath, shots),
-        dominantAlliance,
+        replayPath: buildReplayPath(avgPath, allShots),
+        dominantAlliance: targetAlliance,
         shotBins,
         maxShotBin: shotBins.reduce((max, value) => Math.max(max, value), 0),
       } as StripSummary;
