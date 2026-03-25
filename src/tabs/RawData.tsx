@@ -5,6 +5,7 @@ import { AutonPathData, MatchScoutData, PitScoutData, SyncRecord } from '../type
 import { gemini, MatchNoteSummary } from '../lib/gemini';
 import { statbotics, StatboticsTeamEvent } from '../lib/statbotics';
 import { getProfileTeams } from '../lib/competitionProfiles';
+import { AutonPathField } from '../components/AutonPathField';
 
 type RawEntryType = 'pit' | 'match';
 
@@ -63,6 +64,8 @@ type StripSummary = {
   runCount: number;
   totalShots: number;
   avgPath: NormalizedPoint[];
+  replayPath: AutonPathData | null;
+  dominantAlliance: 'Red' | 'Blue' | '';
   shotBins: number[];
   maxShotBin: number;
 };
@@ -201,6 +204,34 @@ function buildHeatmapBins(shots: NormalizedPoint[], cols: number, rows: number):
   });
 
   return bins;
+}
+
+function buildReplayPath(points: NormalizedPoint[], shots: NormalizedPoint[]): AutonPathData | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  const durationMs = 15000;
+  const trajectoryPoints = points.map((point, index) => ({
+    x: point.x,
+    y: point.y,
+    timestampMs: points.length <= 1 ? 0 : Math.round((index / (points.length - 1)) * durationMs),
+  }));
+
+  const shotAttempts = shots.map((shot, index) => ({
+    x: shot.x,
+    y: shot.y,
+    timestampMs: shots.length <= 1 ? Math.round(durationMs * 0.7) : Math.round((index / (shots.length - 1)) * durationMs),
+  }));
+
+  return {
+    startPosition: { x: points[0].x, y: points[0].y },
+    capturedAt: new Date(0).toISOString(),
+    durationMs,
+    trajectoryPoints,
+    shotAttempts,
+    fieldVersion: '2026-field-v1',
+  };
 }
 
 function normalizePayload(value: unknown): unknown {
@@ -962,6 +993,12 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       bottom: [],
     };
 
+    const groupedAllianceCounts: Record<StripKey, { red: number; blue: number }> = {
+      top: { red: 0, blue: 0 },
+      middle: { red: 0, blue: 0 },
+      bottom: { red: 0, blue: 0 },
+    };
+
     selectedTeamAutonPaths.forEach((entry) => {
       const strip = resolveStripForY(entry.path.startPosition?.y ?? 0.5);
 
@@ -971,6 +1008,13 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
 
       if (normalizedTrajectory.length > 0) {
         groupedRuns[strip].push(resampleTrajectory(normalizedTrajectory, PATH_SAMPLE_COUNT));
+      }
+
+      if (entry.allianceColor === 'Red') {
+        groupedAllianceCounts[strip].red += 1;
+      }
+      if (entry.allianceColor === 'Blue') {
+        groupedAllianceCounts[strip].blue += 1;
       }
 
       const normalizedShots = entry.path.shotAttempts
@@ -984,13 +1028,22 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       const runs = groupedRuns[stripConfig.key];
       const shots = groupedShots[stripConfig.key];
       const shotBins = buildHeatmapBins(shots, HEATMAP_COLS, HEATMAP_ROWS);
+      const avgPath = averageResampledPaths(runs);
+      const allianceCounts = groupedAllianceCounts[stripConfig.key];
+      const dominantAlliance = allianceCounts.red === allianceCounts.blue
+        ? ''
+        : allianceCounts.red > allianceCounts.blue
+          ? 'Red'
+          : 'Blue';
 
       return {
         key: stripConfig.key,
         label: stripConfig.label,
         runCount: runs.length,
         totalShots: shots.length,
-        avgPath: averageResampledPaths(runs),
+        avgPath,
+        replayPath: buildReplayPath(avgPath, shots),
+        dominantAlliance,
         shotBins,
         maxShotBin: shotBins.reduce((max, value) => Math.max(max, value), 0),
       } as StripSummary;
@@ -1308,63 +1361,14 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                               <p className="text-xs text-slate-400">Runs: {summary.runCount}</p>
                             </div>
 
-                            <svg viewBox={`0 0 ${AUTON_FIELD_WIDTH} ${AUTON_FIELD_HEIGHT}`} className="w-full rounded-lg border border-slate-700 bg-slate-950/70">
-                              <image
-                                href={AUTON_FIELD_OVERLAY_SRC}
-                                x="0"
-                                y="0"
-                                width={AUTON_FIELD_WIDTH}
-                                height={AUTON_FIELD_HEIGHT}
-                                preserveAspectRatio="none"
-                                opacity="0.95"
+                            {summary.replayPath && (
+                              <AutonPathField
+                                instanceId={`avg-replay-${selectedTeamDisplay.teamNumber}-${summary.key}`}
+                                mode="replay"
+                                allianceColor={summary.dominantAlliance}
+                                value={summary.replayPath}
                               />
-
-                              <line
-                                x1="0"
-                                y1={AUTON_FIELD_HEIGHT / 3}
-                                x2={AUTON_FIELD_WIDTH}
-                                y2={AUTON_FIELD_HEIGHT / 3}
-                                stroke="#64748b"
-                                strokeDasharray="8 6"
-                                strokeWidth="1"
-                                opacity="0.7"
-                              />
-                              <line
-                                x1="0"
-                                y1={(AUTON_FIELD_HEIGHT * 2) / 3}
-                                x2={AUTON_FIELD_WIDTH}
-                                y2={(AUTON_FIELD_HEIGHT * 2) / 3}
-                                stroke="#64748b"
-                                strokeDasharray="8 6"
-                                strokeWidth="1"
-                                opacity="0.7"
-                              />
-
-                              {summary.avgPath.length > 1 && (
-                                <polyline
-                                  fill="none"
-                                  stroke="#22d3ee"
-                                  strokeWidth="5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  points={toPolyline(summary.avgPath)}
-                                />
-                              )}
-
-                              {summary.avgPath.length > 0 && (() => {
-                                const start = toSvgPoint(summary.avgPath[0]);
-                                return (
-                                  <circle
-                                    cx={start.x}
-                                    cy={start.y}
-                                    r="8"
-                                    fill="#f97316"
-                                    stroke="#fdba74"
-                                    strokeWidth="2"
-                                  />
-                                );
-                              })()}
-                            </svg>
+                            )}
 
                             {summary.runCount === 0 && (
                               <p className="text-xs text-slate-500">No autonomous paths captured from this start strip yet.</p>
