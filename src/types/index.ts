@@ -39,6 +39,9 @@ export interface PitScoutData {
 export interface MatchScoutData {
   eventKey?: string;
   matchKey?: string;
+  validated?: boolean;
+  scoutedByAdmin?: boolean;
+  scoutedByAdminProfileId?: string;
   matchNumber: number | '';
   teamNumber: number | '';
   allianceColor: AllianceColor | '';

@@ -1,18 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { showToast } from '../components/Toast';
 import { storage } from '../lib/storage';
-import { deleteMatchScoutById, supabase } from '../lib/supabase';
+import { deleteMatchScoutById, supabase, validateMatchScoutById } from '../lib/supabase';
 import { MatchScoutData, SyncRecord } from '../types';
 
 type MatchScoutRow = {
   id: string;
+  localKey?: string;
   matchNumber: number | string;
   teamNumber: number | string;
   alliance: string;
   eventKey: string;
   notes: string;
   updatedAt: number;
+  validated: boolean;
   source: 'local' | 'remote';
 };
 
@@ -20,6 +22,7 @@ type SupabaseMatchRow = {
   id: string;
   match_number?: number | null;
   team_number?: number | null;
+  validated?: boolean | null;
   data: unknown;
   updated_at?: string | null;
 };
@@ -77,35 +80,46 @@ export function AdminMatchCleanup() {
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [validatingId, setValidatingId] = useState<string | null>(null);
 
   const loadRows = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      const localRows: MatchScoutRow[] = storage
+      const localRows = storage
         .getAllKeys()
         .filter((key) => key.startsWith('matchScout:'))
-        .map((key) => storage.get<SyncRecord<any>>(key))
-        .filter((record): record is SyncRecord<any> => Boolean(record?.id))
-        .map((record) => {
+        .map((key) => ({ key, record: storage.get<SyncRecord<any>>(key) }))
+        .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
+        .map(({ key, record }) => {
           const payload = asMatchPayload(record.data);
+          const validated = Boolean(payload.validated);
+          if (validated) {
+            return null;
+          }
           const notes = [trimText(payload.autonNotes), trimText(payload.defenseNotes), trimText(payload.notes)]
             .filter(Boolean)
             .join(' | ');
 
           return {
             id: record.id,
+            localKey: key,
             matchNumber: toDisplayNumber(payload.matchNumber),
             teamNumber: toDisplayNumber(payload.teamNumber),
             alliance: trimText(payload.allianceColor) || 'Unknown',
             eventKey: trimText(payload.eventKey) || 'Unknown',
             notes: notes || 'No notes',
             updatedAt: record.timestamp || 0,
-            source: 'local',
+            validated,
+            source: 'local' as const,
           };
-        });
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
 
-      const { data, error } = await supabase.from('match_scouts').select('id, match_number, team_number, data, updated_at');
+      const { data, error } = await supabase
+        .from('match_scouts')
+        .select('id, match_number, team_number, validated, data, updated_at')
+        .eq('validated', false);
       if (error) {
         throw error;
       }
@@ -124,6 +138,7 @@ export function AdminMatchCleanup() {
           eventKey: trimText(payload.eventKey) || 'Unknown',
           notes: notes || 'No notes',
           updatedAt: toUpdatedAt(row.updated_at),
+          validated: Boolean(row.validated ?? payload.validated),
           source: 'remote',
         };
       });
@@ -175,7 +190,7 @@ export function AdminMatchCleanup() {
   }, [rows, query]);
 
   const handleDelete = async (row: MatchScoutRow) => {
-    if (deletingId) {
+    if (deletingId || validatingId) {
       return;
     }
 
@@ -199,13 +214,42 @@ export function AdminMatchCleanup() {
     }
   };
 
+  const handleValidate = async (row: MatchScoutRow) => {
+    if (deletingId || validatingId) {
+      return;
+    }
+
+    setValidatingId(row.id);
+    try {
+      if (row.localKey) {
+        const localRecord = storage.get<SyncRecord<any>>(row.localKey);
+        if (localRecord?.data && typeof localRecord.data === 'object') {
+          storage.saveRecord('matchScout', row.localKey, {
+            ...(localRecord.data as Record<string, unknown>),
+            validated: true,
+          });
+        }
+      }
+
+      await validateMatchScoutById(row.id);
+      setRows((current) => current.filter((entry) => entry.id !== row.id));
+      showToast(`Validated match ${row.matchNumber} team ${row.teamNumber}`);
+      window.dispatchEvent(new CustomEvent('sync-success'));
+    } catch (error) {
+      console.error('Failed to validate match scout row:', error);
+      showToast('Validation failed. Try again.');
+    } finally {
+      setValidatingId(null);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-5 space-y-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-bold text-white">Admin Match Cleanup</h2>
           <p className="text-sm text-slate-300">
-            Review all match scouting records and remove junk entries.
+            Review pending match scouting records. Checkmark validates and hides the record, X deletes junk.
           </p>
         </div>
 
@@ -219,9 +263,9 @@ export function AdminMatchCleanup() {
 
       <div className="bg-slate-800/50 border border-slate-700 rounded-2xl overflow-hidden">
         {isLoading ? (
-          <div className="p-5 text-slate-300">Loading match scouting data...</div>
+          <div className="p-5 text-slate-300">Loading pending match scouting data...</div>
         ) : filteredRows.length === 0 ? (
-          <div className="p-5 text-slate-300">No match scouting records found.</div>
+          <div className="p-5 text-slate-300">No pending match scouting records found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -234,7 +278,7 @@ export function AdminMatchCleanup() {
                   <th className="px-3 py-2 text-left font-medium">Updated</th>
                   <th className="px-3 py-2 text-left font-medium">Source</th>
                   <th className="px-3 py-2 text-left font-medium">Notes</th>
-                  <th className="px-3 py-2 text-right font-medium">Delete</th>
+                  <th className="px-3 py-2 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,9 +296,20 @@ export function AdminMatchCleanup() {
                     <td className="px-3 py-2 text-right">
                       <button
                         onClick={() => {
+                          void handleValidate(row);
+                        }}
+                        disabled={validatingId === row.id || deletingId === row.id}
+                        className="mr-2 inline-flex items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Validate match ${row.matchNumber} team ${row.teamNumber}`}
+                        title="Validate record"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
                           void handleDelete(row);
                         }}
-                        disabled={deletingId === row.id}
+                        disabled={deletingId === row.id || validatingId === row.id}
                         className="inline-flex items-center justify-center rounded-lg border border-rose-500/40 bg-rose-500/10 p-2 text-rose-200 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label={`Delete match ${row.matchNumber} team ${row.teamNumber}`}
                         title="Delete record"

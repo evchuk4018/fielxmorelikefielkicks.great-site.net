@@ -14,6 +14,7 @@ type SupabaseScoutRow = {
   id: string;
   data: unknown;
   updated_at: string;
+  validated?: boolean | null;
   event_key?: string | null;
   profile_id?: string | null;
 };
@@ -84,7 +85,7 @@ export const syncManager = {
 
       const [pitResult, matchResult] = await Promise.all([
         pitPromise,
-        supabase.from('match_scouts').select('id, data, updated_at'),
+        supabase.from('match_scouts').select('id, data, validated, updated_at'),
       ]);
 
       if (pitResult.error) {
@@ -125,11 +126,15 @@ export const syncManager = {
       });
 
       (matchResult.data || []).forEach((row: SupabaseScoutRow) => {
+        const payload = normalizeJsonPayload(row.data) as any;
         const record = {
           id: row.id,
           type: 'matchScout',
           timestamp: new Date(row.updated_at).getTime(),
-          data: normalizeJsonPayload(row.data),
+          data: {
+            ...payload,
+            validated: Boolean(row.validated ?? payload?.validated),
+          },
         } as SyncRecord<any>;
 
         const key = `matchScout:${record.data.matchNumber}:${record.data.teamNumber}`;
@@ -230,6 +235,7 @@ export const syncManager = {
           match_number: toNullableNumber((record.data as any)?.matchNumber),
           team_number: toNullableNumber((record.data as any)?.teamNumber),
           alliance: (record.data as any)?.allianceColor || null,
+          validated: Boolean((record.data as any)?.validated),
           data: record.data,
           updated_at: new Date(record.timestamp).toISOString(),
         }));

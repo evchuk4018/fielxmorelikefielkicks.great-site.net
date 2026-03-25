@@ -26,6 +26,8 @@ const EMPTY_FORM = {
 
 type Props = {
   activeProfile: CompetitionProfile | null;
+  isAdminScout: boolean;
+  adminProfileId: string | null;
 };
 
 function toTeamNumber(teamKey: string): number {
@@ -50,7 +52,7 @@ function formatMatchLabel(match: TBAMatch): string {
   return `${match.comp_level.toUpperCase()} ${match.set_number}-${match.match_number}`;
 }
 
-export function EventMatchScouting({ activeProfile }: Props) {
+export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId }: Props) {
   const [matches, setMatches] = useState<TBAMatch[]>([]);
   const [teamNameByNumber, setTeamNameByNumber] = useState<Map<number, string>>(new Map());
   const [selectedMatchKey, setSelectedMatchKey] = useState<string>('');
@@ -197,6 +199,9 @@ export function EventMatchScouting({ activeProfile }: Props) {
     const record: EventMatchScoutData = {
       eventKey: activeProfile.eventKey,
       matchKey: selectedMatch.key,
+      validated: isAdminScout,
+      scoutedByAdmin: isAdminScout,
+      scoutedByAdminProfileId: isAdminScout ? adminProfileId || undefined : undefined,
       matchNumber: selectedMatch.match_number,
       teamNumber: selectedTeamNumber as number,
       allianceColor: getAllianceColor(),

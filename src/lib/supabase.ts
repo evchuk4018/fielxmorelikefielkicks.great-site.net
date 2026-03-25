@@ -133,3 +133,15 @@ export async function deleteMatchScoutById(id: string): Promise<void> {
     throw new Error(error.message || 'Failed to delete match scout record.');
   }
 }
+
+export async function validateMatchScoutById(id: string): Promise<void> {
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    throw new Error('A valid match scout id is required for validation.');
+  }
+
+  const { error } = await supabase.from('match_scouts').update({ validated: true }).eq('id', trimmedId);
+  if (error) {
+    throw new Error(error.message || 'Failed to validate match scout record.');
+  }
+}

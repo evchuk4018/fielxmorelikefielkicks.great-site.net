@@ -46,6 +46,7 @@ create table if not exists public.match_scouts (
   team_number integer,
   alliance text,
   previous_team_ranking text,
+  validated boolean not null default false,
   data jsonb not null,
   updated_at timestamptz not null default now(),
   constraint match_scouts_alliance_check check (alliance is null or alliance in ('Red', 'Blue'))
@@ -95,6 +96,9 @@ create table if not exists public.admin_user_state (
 alter table public.match_scouts
 add column if not exists previous_team_ranking text;
 
+alter table public.match_scouts
+add column if not exists validated boolean not null default false;
+
 create index if not exists idx_pit_scouts_updated_at on public.pit_scouts (updated_at desc);
 create index if not exists idx_pit_scouts_team_number on public.pit_scouts (team_number);
 create index if not exists idx_pit_scouts_event_key on public.pit_scouts (event_key);
@@ -103,6 +107,7 @@ create index if not exists idx_pit_scouts_event_team on public.pit_scouts (event
 create index if not exists idx_match_scouts_updated_at on public.match_scouts (updated_at desc);
 create index if not exists idx_match_scouts_match_number on public.match_scouts (match_number);
 create index if not exists idx_match_scouts_team_number on public.match_scouts (team_number);
+create index if not exists idx_match_scouts_validated on public.match_scouts (validated);
 create index if not exists idx_face_id_enrollments_updated_at on public.face_id_enrollments (updated_at desc);
 create index if not exists idx_face_id_enrollments_created_at on public.face_id_enrollments (created_at desc);
 create index if not exists idx_face_id_enrollments_event_key on public.face_id_enrollments (event_key);

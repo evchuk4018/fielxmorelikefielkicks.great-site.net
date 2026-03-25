@@ -604,7 +604,13 @@ export default function App() {
       case 'pit':
         return <PitScouting activeProfile={activeProfile} />;
       case 'match':
-        return <EventMatchScouting activeProfile={activeProfile} />;
+        return (
+          <EventMatchScouting
+            activeProfile={activeProfile}
+            isAdminScout={Boolean(signedInUserProfile)}
+            adminProfileId={signedInUserProfile?.id || null}
+          />
+        );
       case 'strategy':
         return <AllianceStrategy eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       case 'raw':
