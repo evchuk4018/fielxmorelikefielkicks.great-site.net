@@ -6,6 +6,8 @@ import { gemini, MatchNoteSummary } from '../lib/gemini';
 import { statbotics, StatboticsTeamEvent } from '../lib/statbotics';
 import { getProfileTeams } from '../lib/competitionProfiles';
 import { AutonPathField } from '../components/AutonPathField';
+import { FieldHeatmap } from '../components/FieldHeatmap';
+import { alignPointBetweenAlliances, buildHeatmapBins } from '../lib/heatmapUtils';
 
 type RawEntryType = 'pit' | 'match';
 
@@ -197,22 +199,6 @@ function averageResampledPaths(paths: NormalizedPoint[][]): NormalizedPoint[] {
   }));
 }
 
-function buildHeatmapBins(shots: NormalizedPoint[], cols: number, rows: number): number[] {
-  const bins = Array.from({ length: cols * rows }, () => 0);
-
-  shots.forEach((shot) => {
-    const x = clamp01(shot.x);
-    const y = clamp01(shot.y);
-
-    const col = Math.min(cols - 1, Math.floor(x * cols));
-    const row = Math.min(rows - 1, Math.floor(y * rows));
-    const index = row * cols + col;
-    bins[index] += 1;
-  });
-
-  return bins;
-}
-
 function buildReplayPath(points: NormalizedPoint[], shots: NormalizedPoint[]): AutonPathData | null {
   if (points.length === 0) {
     return null;
@@ -242,15 +228,7 @@ function buildReplayPath(points: NormalizedPoint[], shots: NormalizedPoint[]): A
 }
 
 function alignPointToAlliance(point: NormalizedPoint, sourceAlliance: 'Red' | 'Blue' | '', targetAlliance: 'Red' | 'Blue' | ''): NormalizedPoint {
-  if (!sourceAlliance || !targetAlliance || sourceAlliance === targetAlliance) {
-    return point;
-  }
-
-  // Normalize opposite-alliance recordings into the same red-oriented frame.
-  return {
-    x: 1 - point.x,
-    y: 1 - point.y,
-  };
+  return alignPointBetweenAlliances(point, sourceAlliance, targetAlliance);
 }
 
 function averagePoint(points: NormalizedPoint[]): NormalizedPoint {
@@ -1102,6 +1080,47 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
     });
   }, [selectedTeamAutonPaths]);
 
+  const selectedTeamTeleopSummary = useMemo(() => {
+    const runs = selectedTeamScouting.match
+      .map((entry) => {
+        const match = asMatchPayload(entry.payload);
+        if (!match) {
+          return null;
+        }
+
+        const allianceColor = match.allianceColor === 'Red' || match.allianceColor === 'Blue' ? match.allianceColor : '';
+        const rawAttempts = Array.isArray(match.teleopShotAttempts) ? match.teleopShotAttempts : [];
+        const shots = rawAttempts
+          .filter((shot) => isRecord(shot))
+          .map((shot) => normalizePoint({ x: Number(shot.x), y: Number(shot.y) }))
+          .filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y));
+
+        return {
+          allianceColor,
+          shots,
+        };
+      })
+      .filter((entry): entry is { allianceColor: 'Red' | 'Blue' | ''; shots: NormalizedPoint[] } => entry !== null);
+
+    const redCount = runs.filter((run) => run.allianceColor === 'Red').length;
+    const blueCount = runs.filter((run) => run.allianceColor === 'Blue').length;
+    const dominantAlliance: 'Red' | 'Blue' | '' = redCount === blueCount ? '' : redCount > blueCount ? 'Red' : 'Blue';
+    const targetAlliance: 'Red' | 'Blue' | '' = dominantAlliance || (runs[0]?.allianceColor || '');
+
+    const alignedShots = runs.flatMap((run) => {
+      return run.shots.map((shot) => alignPointToAlliance(shot, run.allianceColor, targetAlliance));
+    });
+
+    const shotBins = buildHeatmapBins(alignedShots, HEATMAP_COLS, HEATMAP_ROWS);
+
+    return {
+      shotBins,
+      maxShotBin: shotBins.reduce((max, value) => Math.max(max, value), 0),
+      totalShots: alignedShots.length,
+      dominantAlliance: targetAlliance,
+    };
+  }, [selectedTeamScouting.match]);
+
   useEffect(() => {
     if (!selectedTeam || !eventKey) {
       setNoteSummary(null);
@@ -1437,72 +1456,57 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
                               <p className="text-xs text-slate-400">Shots: {summary.totalShots}</p>
                             </div>
 
-                            <svg viewBox={`0 0 ${AUTON_FIELD_WIDTH} ${AUTON_FIELD_HEIGHT}`} className="w-full rounded-lg border border-slate-700 bg-slate-950/70">
-                              <image
-                                href={AUTON_FIELD_OVERLAY_SRC}
-                                x="0"
-                                y="0"
-                                width={AUTON_FIELD_WIDTH}
-                                height={AUTON_FIELD_HEIGHT}
-                                preserveAspectRatio="none"
-                                opacity="0.95"
-                              />
-
-                              <line
-                                x1="0"
-                                y1={AUTON_FIELD_HEIGHT / 3}
-                                x2={AUTON_FIELD_WIDTH}
-                                y2={AUTON_FIELD_HEIGHT / 3}
-                                stroke="#64748b"
-                                strokeDasharray="8 6"
-                                strokeWidth="1"
-                                opacity="0.7"
-                              />
-                              <line
-                                x1="0"
-                                y1={(AUTON_FIELD_HEIGHT * 2) / 3}
-                                x2={AUTON_FIELD_WIDTH}
-                                y2={(AUTON_FIELD_HEIGHT * 2) / 3}
-                                stroke="#64748b"
-                                strokeDasharray="8 6"
-                                strokeWidth="1"
-                                opacity="0.7"
-                              />
-
-                              {summary.shotBins.map((count, index) => {
-                                if (count <= 0 || summary.maxShotBin <= 0) {
-                                  return null;
-                                }
-
-                                const col = index % HEATMAP_COLS;
-                                const row = Math.floor(index / HEATMAP_COLS);
-                                const cellWidth = AUTON_FIELD_WIDTH / HEATMAP_COLS;
-                                const cellHeight = AUTON_FIELD_HEIGHT / HEATMAP_ROWS;
-                                const intensity = count / summary.maxShotBin;
-
-                                return (
-                                  <rect
-                                    key={`${summary.key}-bin-${index}`}
-                                    x={col * cellWidth}
-                                    y={row * cellHeight}
-                                    width={cellWidth}
-                                    height={cellHeight}
-                                    fill="#f43f5e"
-                                    opacity={0.12 + intensity * 0.58}
-                                  />
-                                );
-                              })}
-                            </svg>
-
-                            {summary.totalShots === 0 && (
-                              <p className="text-xs text-slate-500">No autonomous shots captured from this start strip yet.</p>
-                            )}
+                            <FieldHeatmap
+                              bins={summary.shotBins}
+                              cols={HEATMAP_COLS}
+                              rows={HEATMAP_ROWS}
+                              maxBin={summary.maxShotBin}
+                              totalShots={summary.totalShots}
+                              width={AUTON_FIELD_WIDTH}
+                              height={AUTON_FIELD_HEIGHT}
+                              overlaySrc={AUTON_FIELD_OVERLAY_SRC}
+                              color="#f43f5e"
+                              showHorizontalThirds
+                              emptyMessage="No autonomous shots captured from this start strip yet."
+                            />
                           </div>
                         ))}
                       </div>
                     </SectionCard>
                   </div>
                 )}
+
+                <div className="mt-4">
+                  <SectionCard title="Teleop Shot Heatmap">
+                    <p className="text-xs text-slate-400">
+                      Tap-mapped teleop shot attempts from all saved match scouts for this team.
+                    </p>
+
+                    <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">Teleop Shot Attempts</p>
+                        <p className="text-xs text-slate-400">Shots: {selectedTeamTeleopSummary.totalShots}</p>
+                      </div>
+
+                      <FieldHeatmap
+                        bins={selectedTeamTeleopSummary.shotBins}
+                        cols={HEATMAP_COLS}
+                        rows={HEATMAP_ROWS}
+                        maxBin={selectedTeamTeleopSummary.maxShotBin}
+                        totalShots={selectedTeamTeleopSummary.totalShots}
+                        width={AUTON_FIELD_WIDTH}
+                        height={AUTON_FIELD_HEIGHT}
+                        overlaySrc={AUTON_FIELD_OVERLAY_SRC}
+                        color="#22c55e"
+                        emptyMessage="No teleop shot taps captured for this team yet."
+                      />
+
+                      <p className="text-xs text-slate-500">
+                        Orientation: {selectedTeamTeleopSummary.dominantAlliance || 'mixed/unknown'} alliance frame
+                      </p>
+                    </div>
+                  </SectionCard>
+                </div>
 
                 <div className="mt-4 space-y-3">
                   {selectedTeamScouting.pit.length === 0 && selectedTeamScouting.match.length === 0 && (

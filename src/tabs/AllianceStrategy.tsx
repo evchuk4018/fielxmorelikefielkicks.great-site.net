@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RawData } from './RawData';
+import { FieldHeatmap } from '../components/FieldHeatmap';
+import { alignPointBetweenAlliances, buildHeatmapBins } from '../lib/heatmapUtils';
+import { storage } from '../lib/storage';
+import { supabase } from '../lib/supabase';
+import { MatchScoutData, SyncRecord } from '../types';
 
 type LockedAlliance = 'blue' | 'red';
 
@@ -29,7 +34,21 @@ type AllianceTotals = {
   missingCount: number;
 };
 
+type TeamShotPoint = {
+  x: number;
+  y: number;
+  allianceColor: 'Red' | 'Blue' | '';
+};
+
+type TeamHeatmapSummary = {
+  bins: number[];
+  maxBin: number;
+  totalShots: number;
+};
+
 const LOCKED_TEAM_NUMBER = 423;
+const HEATMAP_COLS = 12;
+const HEATMAP_ROWS = 6;
 
 function parseEventYear(eventKey: string): number | null {
   const match = eventKey.trim().match(/^(\d{4})/);
@@ -43,6 +62,19 @@ function parseEventYear(eventKey: string): number | null {
   }
 
   return year;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -86,6 +118,22 @@ function pickNumber(source: unknown, paths: string[]): number | null {
   return null;
 }
 
+function normalizePayload(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 function normalizeTeamInput(raw: string): string {
   return raw.replace(/[^\d]/g, '').slice(0, 5);
 }
@@ -123,6 +171,10 @@ function extractTeamYearRows(payload: unknown): Record<string, unknown>[] {
   }
 
   return Object.values(objectPayload).filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object');
+}
+
+function getAllianceLabel(alliance: LockedAlliance): 'Red' | 'Blue' {
+  return alliance === 'blue' ? 'Blue' : 'Red';
 }
 
 async function fetchTeamSeasonEPA(teamNumber: number, year: number): Promise<TeamSeasonEPA> {
@@ -198,6 +250,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
   const [blueInputs, setBlueInputs] = useState<string[]>(['', '', '']);
   const [redInputs, setRedInputs] = useState<string[]>(['', '', '']);
   const [teamStates, setTeamStates] = useState<Record<number, TeamFetchState>>({});
+  const [teamTeleopShots, setTeamTeleopShots] = useState<Record<number, TeamShotPoint[]>>({});
   const [popupTeamNumber, setPopupTeamNumber] = useState<number | null>(null);
 
   const eventYear = useMemo(() => parseEventYear(eventKey), [eventKey]);
@@ -206,6 +259,110 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
   useEffect(() => {
     teamStatesRef.current = teamStates;
   }, [teamStates]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTeleopShots = async () => {
+      const activeEventKey = eventKey.trim().toLowerCase();
+      if (!activeEventKey) {
+        setTeamTeleopShots({});
+        return;
+      }
+
+      const localRecords = storage
+        .getAllKeys()
+        .filter((key) => key.startsWith('matchScout:'))
+        .map((key) => storage.get<SyncRecord<MatchScoutData>>(key))
+        .filter((record): record is SyncRecord<MatchScoutData> => Boolean(record));
+
+      const { data: remoteRows } = await supabase
+        .from('match_scouts')
+        .select('team_number, match_number, data, updated_at');
+
+      const merged = new Map<string, { updatedAt: number; payload: Partial<MatchScoutData> }>();
+
+      localRecords.forEach((record) => {
+        const payload = record.data;
+        const payloadEventKey = typeof payload?.eventKey === 'string' ? payload.eventKey.trim().toLowerCase() : '';
+        if (payloadEventKey !== activeEventKey) {
+          return;
+        }
+
+        const teamNumber = Number(payload.teamNumber);
+        const matchNumber = Number(payload.matchNumber);
+        if (!Number.isInteger(teamNumber) || teamNumber <= 0 || !Number.isInteger(matchNumber) || matchNumber <= 0) {
+          return;
+        }
+
+        const key = `${matchNumber}:${teamNumber}`;
+        const existing = merged.get(key);
+        if (!existing || record.timestamp >= existing.updatedAt) {
+          merged.set(key, { updatedAt: record.timestamp, payload });
+        }
+      });
+
+      (remoteRows || []).forEach((row: any) => {
+        const rawPayload = normalizePayload(row.data);
+        if (!isRecord(rawPayload)) {
+          return;
+        }
+
+        const payload = rawPayload as Partial<MatchScoutData>;
+        const payloadEventKey = typeof payload.eventKey === 'string' ? payload.eventKey.trim().toLowerCase() : '';
+        if (payloadEventKey !== activeEventKey) {
+          return;
+        }
+
+        const teamNumber = Number(row.team_number ?? payload.teamNumber);
+        const matchNumber = Number(row.match_number ?? payload.matchNumber);
+        if (!Number.isInteger(teamNumber) || teamNumber <= 0 || !Number.isInteger(matchNumber) || matchNumber <= 0) {
+          return;
+        }
+
+        const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+        const key = `${matchNumber}:${teamNumber}`;
+        const existing = merged.get(key);
+        if (!existing || updatedAt >= existing.updatedAt) {
+          merged.set(key, { updatedAt, payload });
+        }
+      });
+
+      const nextByTeam: Record<number, TeamShotPoint[]> = {};
+      Array.from(merged.values()).forEach(({ payload }) => {
+        const teamNumber = Number(payload.teamNumber);
+        if (!Number.isInteger(teamNumber) || teamNumber <= 0) {
+          return;
+        }
+
+        const allianceColor: 'Red' | 'Blue' | '' = payload.allianceColor === 'Red' || payload.allianceColor === 'Blue' ? payload.allianceColor : '';
+        const attempts = Array.isArray(payload.teleopShotAttempts) ? payload.teleopShotAttempts : [];
+        const shots: TeamShotPoint[] = attempts
+          .filter((attempt) => isRecord(attempt))
+          .map((attempt): TeamShotPoint => ({
+            x: clamp01(Number((attempt as Record<string, unknown>).x)),
+            y: clamp01(Number((attempt as Record<string, unknown>).y)),
+            allianceColor,
+          }))
+          .filter((attempt) => Number.isFinite(attempt.x) && Number.isFinite(attempt.y));
+
+        if (!nextByTeam[teamNumber]) {
+          nextByTeam[teamNumber] = [];
+        }
+        nextByTeam[teamNumber].push(...shots);
+      });
+
+      if (!cancelled) {
+        setTeamTeleopShots(nextByTeam);
+      }
+    };
+
+    void loadTeleopShots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eventKey]);
 
   const blueTeams = useMemo(() => {
     const parsed = blueInputs.map(parseTeamNumber).filter((team): team is number => team !== null);
@@ -328,6 +485,29 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
   const blueTotals = getAllianceTotals(blueTeams);
   const redTotals = getAllianceTotals(redTeams);
 
+  const summarizeAllianceTeleopHeatmap = (teams: number[], targetAlliance: 'Red' | 'Blue'): TeamHeatmapSummary => {
+    const points = teams.flatMap((teamNumber) => {
+      const teamPoints = teamTeleopShots[teamNumber] || [];
+      return teamPoints.map((point) => {
+        return alignPointBetweenAlliances(
+          { x: point.x, y: point.y },
+          point.allianceColor,
+          targetAlliance,
+        );
+      });
+    });
+
+    const bins = buildHeatmapBins(points, HEATMAP_COLS, HEATMAP_ROWS);
+    return {
+      bins,
+      maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
+      totalShots: points.length,
+    };
+  };
+
+  const blueHeatmap = summarizeAllianceTeleopHeatmap(blueTeams, 'Blue');
+  const redHeatmap = summarizeAllianceTeleopHeatmap(redTeams, 'Red');
+
   const closeTeamPopup = () => {
     setPopupTeamNumber(null);
   };
@@ -368,6 +548,21 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     const teamState = teamNumber ? teamStates[teamNumber] : null;
     const teamData = teamState?.status === 'ready' ? teamState.data : null;
     const isClickable = teamNumber !== null;
+    const targetAlliance = getAllianceLabel(alliance);
+    const teamHeatmap: TeamHeatmapSummary | null = teamNumber
+      ? (() => {
+          const teamPoints = teamTeleopShots[teamNumber] || [];
+          const aligned = teamPoints.map((point) => {
+            return alignPointBetweenAlliances({ x: point.x, y: point.y }, point.allianceColor, targetAlliance);
+          });
+          const bins = buildHeatmapBins(aligned, HEATMAP_COLS, HEATMAP_ROWS);
+          return {
+            bins,
+            maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
+            totalShots: aligned.length,
+          };
+        })()
+      : null;
 
     return (
       <div
@@ -416,6 +611,21 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
           )}
           {teamNumber && <div className="mt-1 text-slate-500">Click to open full team data</div>}
         </div>
+
+        {teamHeatmap && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs text-slate-300">Teleop Shot Heatmap ({teamHeatmap.totalShots})</p>
+            <FieldHeatmap
+              bins={teamHeatmap.bins}
+              cols={HEATMAP_COLS}
+              rows={HEATMAP_ROWS}
+              maxBin={teamHeatmap.maxBin}
+              totalShots={teamHeatmap.totalShots}
+              color={isBlue ? '#60a5fa' : '#f87171'}
+              emptyMessage="No teleop taps"
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -452,6 +662,19 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
             Missing data for {totals.missingCount} team{totals.missingCount > 1 ? 's' : ''}; totals include available teams only.
           </p>
         )}
+
+        <div className="mt-4 space-y-2">
+          <p className="text-xs text-slate-300">Alliance Teleop Heatmap</p>
+          <FieldHeatmap
+            bins={isBlue ? blueHeatmap.bins : redHeatmap.bins}
+            cols={HEATMAP_COLS}
+            rows={HEATMAP_ROWS}
+            maxBin={isBlue ? blueHeatmap.maxBin : redHeatmap.maxBin}
+            totalShots={isBlue ? blueHeatmap.totalShots : redHeatmap.totalShots}
+            color={isBlue ? '#60a5fa' : '#f87171'}
+            emptyMessage="No teleop taps for this alliance setup yet."
+          />
+        </div>
       </div>
     );
   };
@@ -576,17 +799,4 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -82,6 +82,7 @@ export interface MatchScoutData {
   autonPath?: AutonPathData | null;
 
   // Teleop
+  teleopShotAttempts?: AutonShotAttempt[];
   teleopFuelScored: number;
   avgBps: number;
   shootingConsistency: number;

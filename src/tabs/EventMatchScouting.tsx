@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { tba } from '../lib/tba';
 import { storage } from '../lib/storage';
 import { listAssignmentsForScout, markAssignmentCompleted } from '../lib/supabase';
-import { AutonPathData, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
+import { AutonPathData, AutonShotAttempt, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
 import { Toggle, MultiToggle } from '../components/Toggle';
 import { AutonPathField } from '../components/AutonPathField';
 import { showToast } from '../components/Toast';
@@ -21,6 +21,7 @@ interface EventMatchScoutData extends MatchScoutData {
 const EMPTY_FORM = {
   autonNotes: '',
   autonPath: null as AutonPathData | null,
+  teleopShotAttempts: [] as AutonShotAttempt[],
   playedDefense: false,
   defenseQuality: '' as DefenseQuality | '',
   defenseNotes: '',
@@ -67,16 +68,17 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
 
   const [autonNotes, setAutonNotes] = useState('');
   const [autonPath, setAutonPath] = useState<AutonPathData | null>(null);
+  const [teleopShotAttempts, setTeleopShotAttempts] = useState<AutonShotAttempt[]>([]);
   const [playedDefense, setPlayedDefense] = useState(false);
   const [defenseQuality, setDefenseQuality] = useState<DefenseQuality | ''>('');
   const [defenseNotes, setDefenseNotes] = useState('');
   const [notes, setNotes] = useState('');
 
   // Use a ref so autoSave can always access current form values without stale closures
-  const formRef = useRef({ autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes });
+  const formRef = useRef({ autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes });
   useEffect(() => {
-    formRef.current = { autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes };
-  }, [autonNotes, autonPath, playedDefense, defenseQuality, defenseNotes, notes]);
+    formRef.current = { autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes };
+  }, [autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes]);
 
   useEffect(() => {
     if (!activeProfile) {
@@ -246,6 +248,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     setSelectedTeamNumber('');
     setAutonNotes('');
     setAutonPath(null);
+    setTeleopShotAttempts([]);
     setPlayedDefense(false);
     setDefenseQuality('');
     setDefenseNotes('');
@@ -257,6 +260,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     if (!selectedMatch || selectedTeamNumber === '') {
       setAutonNotes('');
       setAutonPath(null);
+      setTeleopShotAttempts([]);
       setPlayedDefense(false);
       setDefenseQuality('');
       setDefenseNotes('');
@@ -270,6 +274,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
       const d = saved.data;
       setAutonNotes(d.autonNotes || '');
       setAutonPath(d.autonPath || null);
+      setTeleopShotAttempts(Array.isArray(d.teleopShotAttempts) ? d.teleopShotAttempts : []);
       setPlayedDefense(d.playedDefense || false);
       setDefenseQuality(d.defenseQuality || '');
       setDefenseNotes(d.defenseNotes || '');
@@ -277,6 +282,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     } else {
       setAutonNotes('');
       setAutonPath(null);
+      setTeleopShotAttempts([]);
       setPlayedDefense(false);
       setDefenseQuality('');
       setDefenseNotes('');
@@ -368,6 +374,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     setSelectedTeamNumber('');
     setAutonNotes('');
     setAutonPath(null);
+    setTeleopShotAttempts([]);
     setPlayedDefense(false);
     setDefenseQuality('');
     setDefenseNotes('');
@@ -486,6 +493,12 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
           mode="record"
           allianceColor={getAllianceColor()}
           value={autonPath}
+          enableTeleopShotMap
+          teleopShotAttempts={teleopShotAttempts}
+          onTeleopShotAttemptsChange={(next) => {
+            setTeleopShotAttempts(next);
+            persist({ teleopShotAttempts: next });
+          }}
           onChange={(next) => {
             setAutonPath(next);
             persist({ autonPath: next });

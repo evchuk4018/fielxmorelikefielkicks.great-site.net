@@ -2,13 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AllianceColor, AutonPathData, AutonShotAttempt, AutonTrajectoryPoint } from '../types';
 
 type Point = { x: number; y: number };
-type RecorderPhase = 'setup' | 'recording' | 'annotate';
+type RecorderPhase = 'setup' | 'recording' | 'annotate' | 'teleop';
 
 type Props = {
   mode: 'record' | 'replay';
   allianceColor: AllianceColor | '';
   value?: AutonPathData | null;
   onChange?: (next: AutonPathData | null) => void;
+  teleopShotAttempts?: AutonShotAttempt[];
+  onTeleopShotAttemptsChange?: (next: AutonShotAttempt[]) => void;
+  enableTeleopShotMap?: boolean;
   durationMs?: number;
   instanceId?: string;
 };
@@ -131,11 +134,15 @@ export function AutonPathField({
   allianceColor,
   value = null,
   onChange,
+  teleopShotAttempts,
+  onTeleopShotAttemptsChange,
+  enableTeleopShotMap = false,
   durationMs = 20000,
   instanceId,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const startEpochRef = useRef<number | null>(null);
+  const teleopStartEpochRef = useRef<number | null>(null);
   const lastSampleAtRef = useRef<number>(0);
   const isDraggingRef = useRef<boolean>(false);
   const latestRobotPointRef = useRef<Point>({ x: 0.5, y: 0.5 });
@@ -176,9 +183,15 @@ export function AutonPathField({
     setPathData(value ?? null);
     setIsPlaying(false);
     setPlaybackMs(0);
+    teleopStartEpochRef.current = null;
 
     if (value && value.trajectoryPoints.length > 0) {
-      setPhase('annotate');
+      if (mode === 'record' && enableTeleopShotMap) {
+        setPhase('teleop');
+        teleopStartEpochRef.current = performance.now();
+      } else {
+        setPhase('annotate');
+      }
       setElapsedMs(value.durationMs);
       setRobotSetupPoint({ x: value.trajectoryPoints[0].x, y: value.trajectoryPoints[0].y });
       return;
@@ -187,7 +200,7 @@ export function AutonPathField({
     setPhase('setup');
     setElapsedMs(0);
     setRobotSetupPoint(value?.startPosition ? clampPointToAllianceZone(value.startPosition, allianceColor) : defaultStartPoint(allianceColor));
-  }, [instanceId]);
+  }, [enableTeleopShotMap, instanceId, mode, value]);
 
   useEffect(() => {
     if (phase !== 'recording') {
@@ -205,9 +218,10 @@ export function AutonPathField({
       setPlaybackMs(bounded);
 
       if (runningMs >= durationMs) {
-        setPhase('annotate');
+        setPhase(enableTeleopShotMap ? 'teleop' : 'annotate');
         setIsPlaying(false);
         startEpochRef.current = null;
+        teleopStartEpochRef.current = enableTeleopShotMap ? performance.now() : null;
 
         setPathData((current) => {
           if (!current) {
@@ -240,7 +254,7 @@ export function AutonPathField({
     return () => {
       window.clearInterval(timer);
     };
-  }, [durationMs, onChange, phase]);
+  }, [durationMs, enableTeleopShotMap, onChange, phase]);
 
   useEffect(() => {
     if (!isPlaying || !hasPath(pathData) || phase === 'recording') {
@@ -296,7 +310,8 @@ export function AutonPathField({
 
   const canStartRecording = mode === 'record' && phase === 'setup' && isInAllianceStartZone(robotSetupPoint, allianceColor);
   const canAnnotate = mode === 'record' && phase === 'annotate' && hasPath(pathData);
-  const canReplay = hasPath(pathData) && phase !== 'recording';
+  const canMarkTeleop = mode === 'record' && phase === 'teleop';
+  const canReplay = hasPath(pathData) && phase !== 'recording' && phase !== 'teleop';
 
   const beginRecording = () => {
     if (!canStartRecording) {
@@ -309,6 +324,10 @@ export function AutonPathField({
     setPlaybackMs(0);
     setPhase('recording');
     setIsPlaying(false);
+    teleopStartEpochRef.current = null;
+    if (onTeleopShotAttemptsChange) {
+      onTeleopShotAttemptsChange([]);
+    }
 
     startEpochRef.current = performance.now();
     lastSampleAtRef.current = 0;
@@ -329,9 +348,48 @@ export function AutonPathField({
     setPlaybackMs(0);
     setIsPlaying(false);
     startEpochRef.current = null;
+    teleopStartEpochRef.current = null;
     lastSampleAtRef.current = 0;
     emitChange(null);
+    if (onTeleopShotAttemptsChange) {
+      onTeleopShotAttemptsChange([]);
+    }
     setRobotSetupPoint(defaultStartPoint(allianceColor));
+  };
+
+  const appendTeleopShot = (point: Point) => {
+    if (!canMarkTeleop || !onTeleopShotAttemptsChange) {
+      return;
+    }
+
+    const startedAt = teleopStartEpochRef.current ?? performance.now();
+    const timestampMs = Math.max(0, Math.floor(performance.now() - startedAt));
+    const existing = teleopShotAttempts || [];
+
+    onTeleopShotAttemptsChange([
+      ...existing,
+      {
+        x: point.x,
+        y: point.y,
+        timestampMs,
+      },
+    ]);
+  };
+
+  const removeLastTeleopShot = () => {
+    if (!onTeleopShotAttemptsChange || !teleopShotAttempts?.length) {
+      return;
+    }
+
+    onTeleopShotAttemptsChange(teleopShotAttempts.slice(0, -1));
+  };
+
+  const clearTeleopShots = () => {
+    if (!onTeleopShotAttemptsChange || !teleopShotAttempts?.length) {
+      return;
+    }
+
+    onTeleopShotAttemptsChange([]);
   };
 
   const appendTrajectorySample = (point: Point) => {
@@ -368,6 +426,12 @@ export function AutonPathField({
 
   const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
     if (!svgRef.current || mode !== 'record') {
+      return;
+    }
+
+    if (phase === 'teleop') {
+      const point = fromDisplayPoint(toFieldPoint(event, svgRef.current), isViewRotated);
+      appendTeleopShot(point);
       return;
     }
 
@@ -466,6 +530,8 @@ export function AutonPathField({
     });
   };
 
+  const teleopShots = teleopShotAttempts || [];
+
   const robotSvgPoint = pointToSvg(robotDisplayPoint);
 
   return (
@@ -494,26 +560,33 @@ export function AutonPathField({
           >
             Match Start
           </button>
+          {phase === 'annotate' && (
+            <button
+              type="button"
+              disabled={!canAnnotate}
+              onClick={handleRobotShotTap}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+            >
+              Tap Robot = Shot Attempt
+            </button>
+          )}
+          {phase === 'teleop' && (
+            <span className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-950/60 border border-blue-500/40 text-blue-100">
+              Tap anywhere on map to mark teleop shot attempts
+            </span>
+          )}
           <button
             type="button"
-            disabled={!canAnnotate}
-            onClick={handleRobotShotTap}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
-          >
-            Tap Robot = Shot Attempt
-          </button>
-          <button
-            type="button"
-            disabled={!canAnnotate || !pathData?.shotAttempts.length}
-            onClick={removeLastShot}
+            disabled={phase === 'teleop' ? !teleopShots.length : !canAnnotate || !pathData?.shotAttempts.length}
+            onClick={phase === 'teleop' ? removeLastTeleopShot : removeLastShot}
             className="px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
             Remove Last Shot
           </button>
           <button
             type="button"
-            disabled={!canAnnotate || !pathData?.shotAttempts.length}
-            onClick={clearShots}
+            disabled={phase === 'teleop' ? !teleopShots.length : !canAnnotate || !pathData?.shotAttempts.length}
+            onClick={phase === 'teleop' ? clearTeleopShots : clearShots}
             className="px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           >
             Clear Shots
@@ -540,20 +613,20 @@ export function AutonPathField({
           <g transform={isViewRotated ? `translate(${FIELD_WIDTH} ${FIELD_HEIGHT}) rotate(180)` : undefined}>
             <image href={FIELD_OVERLAY_SRC} x="0" y="0" width={FIELD_WIDTH} height={FIELD_HEIGHT} preserveAspectRatio="none" />
 
-            {allianceColor === 'Red' && (
+            {phase !== 'teleop' && allianceColor === 'Red' && (
               <rect x="0" y="0" width={FIELD_WIDTH * RED_START_LINE_X} height={FIELD_HEIGHT} fill="#dc2626" opacity="0.12" />
             )}
-            {allianceColor === 'Blue' && (
+            {phase !== 'teleop' && allianceColor === 'Blue' && (
               <rect x={FIELD_WIDTH * BLUE_START_LINE_X} y="0" width={FIELD_WIDTH * (1 - BLUE_START_LINE_X)} height={FIELD_HEIGHT} fill="#2563eb" opacity="0.12" />
             )}
-            {allianceColor === 'Red' && (
+            {phase !== 'teleop' && allianceColor === 'Red' && (
               <line x1={FIELD_WIDTH * RED_START_LINE_X} y1="0" x2={FIELD_WIDTH * RED_START_LINE_X} y2={FIELD_HEIGHT} stroke="#b91c1c" strokeDasharray="8 6" strokeWidth="3" />
             )}
-            {allianceColor === 'Blue' && (
+            {phase !== 'teleop' && allianceColor === 'Blue' && (
               <line x1={FIELD_WIDTH * BLUE_START_LINE_X} y1="0" x2={FIELD_WIDTH * BLUE_START_LINE_X} y2={FIELD_HEIGHT} stroke="#1d4ed8" strokeDasharray="8 6" strokeWidth="3" />
             )}
 
-            {hasPath(pathData) && pathData.trajectoryPoints.length > 1 && (
+            {phase !== 'teleop' && hasPath(pathData) && pathData.trajectoryPoints.length > 1 && (
               <polyline
                 fill="none"
                 stroke={allianceColor === 'Blue' ? '#2563eb' : '#dc2626'}
@@ -565,7 +638,7 @@ export function AutonPathField({
               />
             )}
 
-            {shotAttemptsOnTimeline.map((shot, index) => {
+            {phase !== 'teleop' && shotAttemptsOnTimeline.map((shot, index) => {
               const marker = pointToSvg(shot);
               return (
                 <g key={`${shot.timestampMs}-${index}`}>
@@ -575,20 +648,32 @@ export function AutonPathField({
               );
             })}
 
-            <g
-              onClick={canAnnotate ? handleRobotShotTap : undefined}
-              style={{ cursor: canAnnotate ? 'pointer' : 'default' }}
-            >
-              <circle
-                cx={robotSvgPoint.x}
-                cy={robotSvgPoint.y}
-                r="18"
-                fill={allianceColor === 'Blue' ? '#1d4ed8' : '#b91c1c'}
-                stroke="#111827"
-                strokeWidth="3"
-              />
-              <circle cx={robotSvgPoint.x} cy={robotSvgPoint.y} r="6" fill="#f8fafc" />
-            </g>
+            {phase === 'teleop' && teleopShots.map((shot, index) => {
+              const marker = pointToSvg(shot);
+              return (
+                <g key={`teleop-${shot.timestampMs}-${index}`}>
+                  <circle cx={marker.x} cy={marker.y} r={9} fill="#22c55e" stroke="#14532d" strokeWidth="2" />
+                  <circle cx={marker.x} cy={marker.y} r={3} fill="#ecfdf5" />
+                </g>
+              );
+            })}
+
+            {phase !== 'teleop' && (
+              <g
+                onClick={canAnnotate ? handleRobotShotTap : undefined}
+                style={{ cursor: canAnnotate ? 'pointer' : 'default' }}
+              >
+                <circle
+                  cx={robotSvgPoint.x}
+                  cy={robotSvgPoint.y}
+                  r="18"
+                  fill={allianceColor === 'Blue' ? '#1d4ed8' : '#b91c1c'}
+                  stroke="#111827"
+                  strokeWidth="3"
+                />
+                <circle cx={robotSvgPoint.x} cy={robotSvgPoint.y} r="6" fill="#f8fafc" />
+              </g>
+            )}
           </g>
         </svg>
       </div>
@@ -630,7 +715,36 @@ export function AutonPathField({
         </div>
       )}
 
-      {pathData?.shotAttempts?.length ? (
+      {phase === 'teleop' && teleopShots.length ? (
+        <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+          <h4 className="text-sm font-semibold text-slate-100">Teleop Shot Attempts</h4>
+          <div className="mt-2 max-h-40 overflow-auto text-xs text-slate-300">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="text-left py-1">#</th>
+                  <th className="text-left py-1">Time</th>
+                  <th className="text-left py-1">X</th>
+                  <th className="text-left py-1">Y</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teleopShots
+                  .slice()
+                  .sort((a, b) => a.timestampMs - b.timestampMs)
+                  .map((shot, index) => (
+                    <tr key={`teleop-row-${shot.timestampMs}-${index}`} className="border-b border-slate-800">
+                      <td className="py-1">{index + 1}</td>
+                      <td className="py-1 font-mono">{toClockMs(shot.timestampMs)}</td>
+                      <td className="py-1 font-mono">{shot.x.toFixed(3)}</td>
+                      <td className="py-1 font-mono">{shot.y.toFixed(3)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : pathData?.shotAttempts?.length ? (
         <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
           <h4 className="text-sm font-semibold text-slate-100">Shot Attempts Timeline</h4>
           <div className="mt-2 max-h-40 overflow-auto text-xs text-slate-300">
@@ -682,6 +796,12 @@ export function AutonPathField({
       {mode === 'record' && phase === 'annotate' && (
         <p className="text-xs text-emerald-300">
           Recording complete. Scrub timeline and tap the robot to mark each shot attempt.
+        </p>
+      )}
+
+      {mode === 'record' && phase === 'teleop' && (
+        <p className="text-xs text-emerald-300">
+          Auton capture complete. Robot is hidden; tap anywhere on the map to mark teleop shot attempts.
         </p>
       )}
     </div>
