@@ -47,8 +47,8 @@ type TeamHeatmapSummary = {
 };
 
 const LOCKED_TEAM_NUMBER = 423;
-const HEATMAP_COLS = 12;
-const HEATMAP_ROWS = 6;
+const TELEOP_HEATMAP_COLS = 24;
+const TELEOP_HEATMAP_ROWS = 12;
 
 function parseEventYear(eventKey: string): number | null {
   const match = eventKey.trim().match(/^(\d{4})/);
@@ -497,7 +497,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
       });
     });
 
-    const bins = buildHeatmapBins(points, HEATMAP_COLS, HEATMAP_ROWS);
+    const bins = buildHeatmapBins(points, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
     return {
       bins,
       maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
@@ -555,7 +555,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
           const aligned = teamPoints.map((point) => {
             return alignPointBetweenAlliances({ x: point.x, y: point.y }, point.allianceColor, targetAlliance);
           });
-          const bins = buildHeatmapBins(aligned, HEATMAP_COLS, HEATMAP_ROWS);
+          const bins = buildHeatmapBins(aligned, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
           return {
             bins,
             maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
@@ -617,8 +617,8 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
             <p className="text-xs text-slate-300">Teleop Shot Heatmap ({teamHeatmap.totalShots})</p>
             <FieldHeatmap
               bins={teamHeatmap.bins}
-              cols={HEATMAP_COLS}
-              rows={HEATMAP_ROWS}
+              cols={TELEOP_HEATMAP_COLS}
+              rows={TELEOP_HEATMAP_ROWS}
               maxBin={teamHeatmap.maxBin}
               totalShots={teamHeatmap.totalShots}
               color={isBlue ? '#60a5fa' : '#f87171'}
@@ -667,8 +667,8 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
           <p className="text-xs text-slate-300">Alliance Teleop Heatmap</p>
           <FieldHeatmap
             bins={isBlue ? blueHeatmap.bins : redHeatmap.bins}
-            cols={HEATMAP_COLS}
-            rows={HEATMAP_ROWS}
+            cols={TELEOP_HEATMAP_COLS}
+            rows={TELEOP_HEATMAP_ROWS}
             maxBin={isBlue ? blueHeatmap.maxBin : redHeatmap.maxBin}
             totalShots={isBlue ? blueHeatmap.totalShots : redHeatmap.totalShots}
             color={isBlue ? '#60a5fa' : '#f87171'}
@@ -799,4 +799,3 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     </div>
   );
 }
-

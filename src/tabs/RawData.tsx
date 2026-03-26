@@ -83,8 +83,10 @@ const AUTON_FIELD_WIDTH = 1000;
 const AUTON_FIELD_HEIGHT = 540;
 const AUTON_FIELD_OVERLAY_SRC = '/auton-field-overlay.svg';
 const PATH_SAMPLE_COUNT = 45;
-const HEATMAP_COLS = 12;
-const HEATMAP_ROWS = 6;
+const AUTON_HEATMAP_COLS = 12;
+const AUTON_HEATMAP_ROWS = 6;
+const TELEOP_HEATMAP_COLS = 24;
+const TELEOP_HEATMAP_ROWS = 12;
 
 const STRIP_ORDER: Array<{ key: StripKey; label: string; minY: number; maxY: number }> = [
   { key: 'top', label: 'Top Start Strip', minY: 0, maxY: 1 / 3 },
@@ -1064,7 +1066,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       }
 
       const allShots = alignedRuns.flatMap((run) => run.shots);
-      const shotBins = buildHeatmapBins(allShots, HEATMAP_COLS, HEATMAP_ROWS);
+      const shotBins = buildHeatmapBins(allShots, AUTON_HEATMAP_COLS, AUTON_HEATMAP_ROWS);
 
       return {
         key: stripConfig.key,
@@ -1111,7 +1113,7 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
       return run.shots.map((shot) => alignPointToAlliance(shot, run.allianceColor, targetAlliance));
     });
 
-    const shotBins = buildHeatmapBins(alignedShots, HEATMAP_COLS, HEATMAP_ROWS);
+    const shotBins = buildHeatmapBins(alignedShots, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
 
     return {
       shotBins,
@@ -1458,8 +1460,8 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
 
                             <FieldHeatmap
                               bins={summary.shotBins}
-                              cols={HEATMAP_COLS}
-                              rows={HEATMAP_ROWS}
+                              cols={AUTON_HEATMAP_COLS}
+                              rows={AUTON_HEATMAP_ROWS}
                               maxBin={summary.maxShotBin}
                               totalShots={summary.totalShots}
                               width={AUTON_FIELD_WIDTH}
@@ -1490,8 +1492,8 @@ export function RawData({ eventKey, profileId, embeddedTeamNumber = null, hideTe
 
                       <FieldHeatmap
                         bins={selectedTeamTeleopSummary.shotBins}
-                        cols={HEATMAP_COLS}
-                        rows={HEATMAP_ROWS}
+                        cols={TELEOP_HEATMAP_COLS}
+                        rows={TELEOP_HEATMAP_ROWS}
                         maxBin={selectedTeamTeleopSummary.maxShotBin}
                         totalShots={selectedTeamTeleopSummary.totalShots}
                         width={AUTON_FIELD_WIDTH}

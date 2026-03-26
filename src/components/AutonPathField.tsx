@@ -651,6 +651,24 @@ export function AutonPathField({
     });
   };
 
+  const handleAutonShoot = () => {
+    if (phase !== 'recording' || mode !== 'record' || !pathData) {
+      return;
+    }
+
+    const timestampMs = Math.min(durationMs, Math.max(0, elapsedMs));
+    const nextShot: AutonShotAttempt = {
+      x: latestRobotPointRef.current.x,
+      y: latestRobotPointRef.current.y,
+      timestampMs,
+    };
+
+    emitChange({
+      ...pathData,
+      shotAttempts: [...pathData.shotAttempts, nextShot],
+    });
+  };
+
   const removeLastShot = () => {
     if (!pathData || pathData.shotAttempts.length === 0) {
       return;
@@ -724,6 +742,16 @@ export function AutonPathField({
           >
             Match Start
           </button>
+          {phase === 'recording' && (
+            <button
+              type="button"
+              disabled={!pathData}
+              onClick={handleAutonShoot}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+            >
+              Shoot
+            </button>
+          )}
           {phase === 'annotate' && (
             <button
               type="button"
@@ -908,7 +936,7 @@ export function AutonPathField({
             </table>
           </div>
         </div>
-      ) : pathData?.shotAttempts?.length ? (
+      ) : phase !== 'teleop' && pathData?.shotAttempts?.length ? (
         <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
           <h4 className="text-sm font-semibold text-slate-100">Shot Attempts Timeline</h4>
           <div className="mt-2 max-h-40 overflow-auto text-xs text-slate-300">
