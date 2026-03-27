@@ -2,6 +2,7 @@ import React from 'react';
 import { AutonPathField } from '../../../components/AutonPathField';
 import { RawMatchPoint, RawerMatchRecord, TeamDisplay } from '../types';
 import { SectionCard } from './RawDataPrimitives';
+import { TeleopShotField } from './TeleopShotField';
 
 type RawerDataPanelProps = {
   selectedTeamDisplay: TeamDisplay;
@@ -176,8 +177,17 @@ export const RawerDataPanel = React.memo(function RawerDataPanel({
             </SectionCard>
 
             <SectionCard title="Raw Teleop Shot Positions">
+              <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-100">Teleop Shot Map</p>
+                  <p className="text-xs text-slate-400">Shots: {record.teleopShotAttempts.length}</p>
+                </div>
+
+                <TeleopShotField points={record.teleopShotAttempts} />
+              </div>
+
               <RawPointTable
-                title="Teleop Shot Attempts"
+                title="Teleop Shot Coordinates"
                 points={record.teleopShotAttempts}
                 emptyMessage="No teleop shots captured."
               />
