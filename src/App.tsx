@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Home } from './tabs/Home';
 import { PitScouting } from './tabs/PitScouting';
 import { AllianceStrategy } from './tabs/AllianceStrategy';
+import { AllianceSelection } from './tabs/AllianceSelection';
 import { RawData } from './tabs/RawData';
 import { EventMatchScouting } from './tabs/EventMatchScouting';
 import { AdminMatchCleanup } from './tabs/AdminMatchCleanup';
@@ -22,10 +23,10 @@ import {
 import { tba } from './lib/tba';
 import { supabase, uploadFaceIdSnapshot, setScoutBanState } from './lib/supabase';
 import { CompetitionProfile, TBAEvent, UserRole } from './types';
-import { Settings, ClipboardList, Target, Database, Clipboard, Shield, LayoutGrid, LogOut } from 'lucide-react';
+import { Settings, ClipboardList, Target, Database, Clipboard, Shield, LayoutGrid, LogOut, DraftingCompass } from 'lucide-react';
 
 type Location = 'home' | 'event';
-type EventTab = 'pit' | 'match' | 'strategy' | 'raw' | 'admin' | 'coverage';
+type EventTab = 'pit' | 'match' | 'strategy' | 'alliance' | 'raw' | 'admin' | 'coverage';
 type FaceIdMode = 'train' | 'test';
 type UserAuthType = 'password' | 'faceid';
 
@@ -776,6 +777,8 @@ export default function App() {
         );
       case 'strategy':
         return <AllianceStrategy eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
+      case 'alliance':
+        return <AllianceSelection eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} />;
       case 'raw':
         return <RawData eventKey={activeProfile?.eventKey || ''} profileId={activeProfile?.id || null} scope="global" />;
       case 'admin':
@@ -1213,6 +1216,17 @@ export default function App() {
               >
                 <Target className="w-4 h-4" />
                 <span className="hidden md:block">Strategy</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('alliance')}
+                className={`p-2 sm:px-4 sm:py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
+                  activeTab === 'alliance'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <DraftingCompass className="w-4 h-4" />
+                <span className="hidden md:block">Alliance</span>
               </button>
               <button
                 onClick={() => setActiveTab('raw')}

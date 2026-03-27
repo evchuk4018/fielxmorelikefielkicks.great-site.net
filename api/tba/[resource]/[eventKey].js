@@ -14,6 +14,11 @@ const RESOURCE_MAP = {
     errorMessage: 'Failed to fetch matches from TBA',
     logName: 'matches',
   },
+  rankings: {
+    pathSuffix: 'rankings',
+    errorMessage: 'Failed to fetch rankings from TBA',
+    logName: 'rankings',
+  },
 };
 
 export default async function handler(req, res) {

@@ -1,5 +1,5 @@
 import { storage } from './storage';
-import { TBATeam, TBAMatch, TBAEvent } from '../types';
+import { TBATeam, TBAMatch, TBAEvent, TBARankings } from '../types';
 
 export const tba = {
   async fetchEvent(eventKey: string): Promise<TBAEvent> {
@@ -52,6 +52,24 @@ export const tba = {
     return matches;
   },
 
+  async fetchRankings(eventKey: string): Promise<TBARankings> {
+    const normalizedEventKey = eventKey.trim().toLowerCase();
+    console.log('[tba.fetchRankings] request', {
+      originalEventKey: eventKey,
+      normalizedEventKey,
+    });
+    const response = await fetch(`/api/tba/rankings/${encodeURIComponent(normalizedEventKey)}`);
+    if (!response.ok) throw new Error('Failed to fetch rankings');
+    const rankings = (await response.json()) as TBARankings;
+    storage.set(`tbaRankings:${normalizedEventKey}`, rankings);
+    storage.set('tbaRankings', rankings);
+    console.log('[tba.fetchRankings] success', {
+      normalizedEventKey,
+      rankingCount: Array.isArray(rankings?.rankings) ? rankings.rankings.length : 0,
+    });
+    return rankings;
+  },
+
   getTeams(): TBATeam[] {
     const teams = storage.get<TBATeam[]>('tbaTeams') || [];
     console.log('[tba.getTeams] cache', { teamCount: teams.length });
@@ -60,5 +78,17 @@ export const tba = {
 
   getMatches(): TBAMatch[] {
     return storage.get<TBAMatch[]>('tbaMatches') || [];
+  },
+
+  getRankings(eventKey?: string): TBARankings | null {
+    if (eventKey) {
+      const normalizedEventKey = eventKey.trim().toLowerCase();
+      const scoped = storage.get<TBARankings>(`tbaRankings:${normalizedEventKey}`);
+      if (scoped) {
+        return scoped;
+      }
+    }
+
+    return storage.get<TBARankings>('tbaRankings');
   }
 };

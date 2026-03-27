@@ -135,6 +135,34 @@ export interface TBAMatch {
   };
 }
 
+export interface TBARankingRecord {
+  wins?: number;
+  losses?: number;
+  ties?: number;
+}
+
+export interface TBARanking {
+  rank?: number;
+  team_key?: string;
+  dq?: number;
+  matches_played?: number;
+  qual_average?: number | null;
+  sort_orders?: number[];
+  record?: TBARankingRecord;
+}
+
+export interface TBARankings {
+  rankings?: TBARanking[];
+  sort_order_info?: Array<{
+    name?: string;
+    precision?: number;
+  }>;
+  extra_stats_info?: Array<{
+    name?: string;
+    precision?: number;
+  }>;
+}
+
 export interface TeamImportData {
   teamNumber: number;
   previousCompRank: string;
