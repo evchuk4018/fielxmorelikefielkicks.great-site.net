@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { showToast } from '../components/Toast';
+import { statbotics } from '../lib/statbotics';
 import { storage } from '../lib/storage';
 import { tba } from '../lib/tba';
 import {
@@ -107,6 +108,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
   const [assignmentScoutId, setAssignmentScoutId] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
   const [isAssignmentBusy, setIsAssignmentBusy] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [assignmentPendingActions, setAssignmentPendingActions] = useState<Record<string, 'delete'>>({});
 
   const loadRows = useCallback(async () => {
@@ -320,47 +322,189 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
     });
   }, [rows, query]);
 
-  const handleExportCsv = useCallback(() => {
-    if (rows.length === 0) {
-      showToast('No data to export');
+  const handleExportCsv = useCallback(async () => {
+    const normalizedEventKey = eventKey.trim().toLowerCase();
+    if (!normalizedEventKey) {
+      showToast('Select an event first');
       return;
     }
 
-    const headers = ['id', 'eventKey', 'matchNumber', 'teamNumber', 'alliance', 'updatedAt', 'validated', 'source', 'notes'];
-    const lines = [
-      headers.map((header) => toCsvCell(header)).join(','),
-      ...rows.map((row) =>
-        [
-          row.id,
-          row.eventKey,
-          row.matchNumber,
-          row.teamNumber,
-          row.alliance,
-          row.updatedAt ? new Date(row.updatedAt).toISOString() : '',
-          row.validated,
-          row.source,
-          row.notes,
-        ]
-          .map((value) => toCsvCell(value))
-          .join(','),
-      ),
-    ];
+    setIsExporting(true);
+    try {
+      const localRows = storage
+        .getAllKeys()
+        .filter((key) => key.startsWith('matchScout:'))
+        .map((key) => ({ key, record: storage.get<SyncRecord<any>>(key) }))
+        .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
+        .map(({ key, record }) => {
+          const payload = asMatchPayload(record.data);
+          const rowEventKey = trimText(payload.eventKey).toLowerCase();
+          if (rowEventKey !== normalizedEventKey) {
+            return null;
+          }
 
-    const csvContent = lines.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const normalizedEventKey = eventKey.trim().toLowerCase() || 'event';
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `admin-match-data-${normalizedEventKey}-${timestamp}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(downloadUrl);
+          const notes = [trimText(payload.autonNotes), trimText(payload.defenseNotes), trimText(payload.notes)]
+            .filter(Boolean)
+            .join(' | ');
 
-    showToast(`Exported ${rows.length} rows to CSV`);
-  }, [eventKey, rows]);
+          return {
+            id: record.id,
+            localKey: key,
+            matchNumber: toDisplayNumber(payload.matchNumber),
+            teamNumber: toDisplayNumber(payload.teamNumber),
+            alliance: trimText(payload.allianceColor) || 'Unknown',
+            eventKey: trimText(payload.eventKey) || normalizedEventKey,
+            notes: notes || 'No notes',
+            updatedAt: record.timestamp || 0,
+            validated: Boolean(payload.validated),
+            source: 'local' as const,
+            payload,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+
+      const { data, error } = await supabase
+        .from('match_scouts')
+        .select('id, match_number, team_number, validated, data, updated_at');
+      if (error) {
+        throw error;
+      }
+
+      const remoteRows = ((data || []) as SupabaseMatchRow[])
+        .map((row) => {
+          const payload = asMatchPayload(normalizePayload(row.data));
+          const rowEventKey = trimText(payload.eventKey).toLowerCase();
+          if (rowEventKey !== normalizedEventKey) {
+            return null;
+          }
+
+          const notes = [trimText(payload.autonNotes), trimText(payload.defenseNotes), trimText(payload.notes)]
+            .filter(Boolean)
+            .join(' | ');
+
+          return {
+            id: row.id,
+            matchNumber: row.match_number ?? toDisplayNumber(payload.matchNumber),
+            teamNumber: row.team_number ?? toDisplayNumber(payload.teamNumber),
+            alliance: trimText(payload.allianceColor) || 'Unknown',
+            eventKey: trimText(payload.eventKey) || normalizedEventKey,
+            notes: notes || 'No notes',
+            updatedAt: toUpdatedAt(row.updated_at),
+            validated: Boolean(row.validated ?? payload.validated),
+            source: 'remote' as const,
+            payload,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+
+      type ExportRow = {
+        id: string;
+        localKey?: string;
+        matchNumber: number | string;
+        teamNumber: number | string;
+        alliance: string;
+        eventKey: string;
+        notes: string;
+        updatedAt: number;
+        validated: boolean;
+        source: 'local' | 'remote';
+        payload: Partial<MatchScoutData>;
+      };
+
+      const merged = new Map<string, ExportRow>();
+      [...localRows, ...remoteRows].forEach((row) => {
+        const existing = merged.get(row.id);
+        if (!existing || row.updatedAt >= existing.updatedAt) {
+          merged.set(row.id, row);
+        }
+      });
+
+      const exportRows = Array.from(merged.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (exportRows.length === 0) {
+        showToast('No data to export');
+        return;
+      }
+
+      const statRows = await statbotics.fetchEventTeams(normalizedEventKey);
+      const epaByTeam = new Map<number, { epaZ: number | null; total: number | null; auto: number | null; teleop: number | null; endgame: number | null }>();
+      (statRows || []).forEach((row) => {
+        const teamNumber = Number(row.team_number ?? row.team);
+        if (!Number.isFinite(teamNumber)) {
+          return;
+        }
+        epaByTeam.set(teamNumber, {
+          epaZ: typeof row.norm_epa === 'number' && Number.isFinite(row.norm_epa) ? row.norm_epa : null,
+          total: typeof row.epa?.total_points === 'number' && Number.isFinite(row.epa.total_points) ? row.epa.total_points : null,
+          auto: typeof row.epa?.auto_points === 'number' && Number.isFinite(row.epa.auto_points) ? row.epa.auto_points : null,
+          teleop: typeof row.epa?.teleop_points === 'number' && Number.isFinite(row.epa.teleop_points) ? row.epa.teleop_points : null,
+          endgame: typeof row.epa?.endgame_points === 'number' && Number.isFinite(row.epa.endgame_points) ? row.epa.endgame_points : null,
+        });
+      });
+
+      const headers = [
+        'id',
+        'eventKey',
+        'matchNumber',
+        'teamNumber',
+        'alliance',
+        'updatedAt',
+        'validated',
+        'source',
+        'notes',
+        'epaZ',
+        'epaTotal',
+        'epaAuto',
+        'epaTeleop',
+        'epaEndgame',
+        'payloadJson',
+      ];
+      const lines = [
+        headers.map((header) => toCsvCell(header)).join(','),
+        ...exportRows.map((row) => {
+          const parsedTeamNumber = typeof row.teamNumber === 'number' ? row.teamNumber : Number(row.teamNumber);
+          const epa = Number.isFinite(parsedTeamNumber) ? epaByTeam.get(parsedTeamNumber) : undefined;
+          return [
+            row.id,
+            row.eventKey,
+            row.matchNumber,
+            row.teamNumber,
+            row.alliance,
+            row.updatedAt ? new Date(row.updatedAt).toISOString() : '',
+            row.validated,
+            row.source,
+            row.notes,
+            epa?.epaZ ?? '',
+            epa?.total ?? '',
+            epa?.auto ?? '',
+            epa?.teleop ?? '',
+            epa?.endgame ?? '',
+            JSON.stringify(row.payload),
+          ]
+            .map((value) => toCsvCell(value))
+            .join(',');
+        }),
+      ];
+
+      const csvContent = lines.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `admin-match-data-${normalizedEventKey}-${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
+      showToast(`Exported ${exportRows.length} rows to CSV`);
+    } catch (error) {
+      console.error('Failed to export admin CSV:', error);
+      showToast('Export failed. Try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [eventKey]);
 
   const handleDelete = async (row: MatchScoutRow) => {
     if (pendingActions[row.id]) {
@@ -495,11 +639,13 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
             className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
           />
           <button
-            onClick={handleExportCsv}
-            disabled={rows.length === 0}
+            onClick={() => {
+              void handleExportCsv();
+            }}
+            disabled={isExporting}
             className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-200 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Export all data as CSV
+            {isExporting ? 'Exporting CSV...' : 'Export all data as CSV'}
           </button>
         </div>
       </div>
