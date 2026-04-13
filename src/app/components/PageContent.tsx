@@ -7,6 +7,8 @@ import { RawData } from '../../tabs/RawData';
 import { EventMatchScouting } from '../../tabs/EventMatchScouting';
 import { AdminMatchCleanup } from '../../tabs/AdminMatchCleanup';
 import { MatchScoutingCoverage } from '../../tabs/MatchScoutingCoverage.tsx';
+import { PrescoutingCoverage } from '../../tabs/PrescoutingCoverage.tsx';
+import { PrescoutingMatchScouting } from '../../tabs/PrescoutingMatchScouting.tsx';
 import { CompetitionProfile } from '../../types';
 import { EventTab, Location, UserProfile } from '../types';
 
@@ -25,6 +27,7 @@ type PageContentProps = {
   onSelectProfile: (profileId: string) => void;
   onBanScout: (scoutProfileId: string) => Promise<void>;
   onUnbanScout: (scoutProfileId: string) => Promise<void>;
+  onOpenPrescouting: () => void;
 };
 
 function MatchFallback(props: {
@@ -60,6 +63,7 @@ export function PageContent(props: PageContentProps) {
     onSelectProfile,
     onBanScout,
     onUnbanScout,
+    onOpenPrescouting,
   } = props;
 
   if (isLoadingProfiles) {
@@ -77,8 +81,14 @@ export function PageContent(props: PageContentProps) {
   if (location === 'home') {
     if (!isAdminSignedIn) {
       return (
-        <div className="max-w-4xl mx-auto rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-slate-300">
-          Waiting for an admin to select the active event profile. Scouts cannot change the global event.
+        <div className="max-w-4xl mx-auto rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-slate-300 space-y-4">
+          <p>Waiting for an admin to select the active event profile. Scouts cannot change the global event.</p>
+          <button
+            onClick={onOpenPrescouting}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/20"
+          >
+            Open Prescouting
+          </button>
         </div>
       );
     }
@@ -90,6 +100,21 @@ export function PageContent(props: PageContentProps) {
         isCreatingProfile={isCreatingProfile}
         onCreateProfile={onCreateProfile}
         onSelectProfile={onSelectProfile}
+        onOpenPrescouting={onOpenPrescouting}
+      />
+    );
+  }
+
+  if (location === 'prescouting') {
+    if (activeTab === 'prescouting-coverage') {
+      return <PrescoutingCoverage />;
+    }
+
+    return (
+      <PrescoutingMatchScouting
+        isAdminScout={isAdminSignedIn}
+        adminProfileId={signedInUserProfile?.id || null}
+        scoutProfileId={isScoutSignedIn ? signedInUserProfile?.id || null : null}
       />
     );
   }

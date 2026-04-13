@@ -127,6 +127,7 @@ export interface TBATeam {
 
 export interface TBAMatch {
   key: string;
+  event_key?: string;
   comp_level: string;
   set_number: number;
   match_number: number;
@@ -134,6 +135,15 @@ export interface TBAMatch {
     red: { team_keys: string[] };
     blue: { team_keys: string[] };
   };
+}
+
+export interface TBAVideo {
+  type: string;
+  key: string;
+}
+
+export interface TBAMatchDetail extends TBAMatch {
+  videos?: TBAVideo[];
 }
 
 export interface TBARankingRecord {

@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { compLevelSortOrder, formatMatchLabel, toTeamNumber } from '../lib/matchUtils';
 import { tba } from '../lib/tba';
-import { storage } from '../lib/storage';
+import { getMatchScoutStorageKeyCandidates, storage } from '../lib/storage';
 import { listAssignmentsForScout, markAssignmentCompleted } from '../lib/supabase';
 import { AutonPathData, AutonShotAttempt, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
-import { Toggle, MultiToggle } from '../components/Toggle';
-import { AutonPathField } from '../components/AutonPathField';
+import { MatchScoutingFormState, MatchScoutingSections } from '../components/MatchScoutingSections';
 import { showToast } from '../components/Toast';
-import { Save } from 'lucide-react';
 
 type AllianceColor = 'Red' | 'Blue';
 
@@ -35,28 +34,6 @@ type Props = {
   scoutProfileId: string | null;
 };
 
-function toTeamNumber(teamKey: string): number {
-  return Number(teamKey.replace('frc', ''));
-}
-
-function compLevelSortOrder(compLevel: string): number {
-  switch (compLevel) {
-    case 'qm': return 0;
-    case 'ef': return 1;
-    case 'qf': return 2;
-    case 'sf': return 3;
-    case 'f':  return 4;
-    default:   return 5;
-  }
-}
-
-function formatMatchLabel(match: TBAMatch): string {
-  if (match.comp_level === 'qm') {
-    return `QM ${match.match_number}`;
-  }
-  return `${match.comp_level.toUpperCase()} ${match.set_number}-${match.match_number}`;
-}
-
 export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId, scoutProfileId }: Props) {
   const [matches, setMatches] = useState<TBAMatch[]>([]);
   const [teamNameByNumber, setTeamNameByNumber] = useState<Map<number, string>>(new Map());
@@ -66,19 +43,13 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [autonNotes, setAutonNotes] = useState('');
-  const [autonPath, setAutonPath] = useState<AutonPathData | null>(null);
-  const [teleopShotAttempts, setTeleopShotAttempts] = useState<AutonShotAttempt[]>([]);
-  const [playedDefense, setPlayedDefense] = useState(false);
-  const [defenseQuality, setDefenseQuality] = useState<DefenseQuality | ''>('');
-  const [defenseNotes, setDefenseNotes] = useState('');
-  const [notes, setNotes] = useState('');
+  const [formState, setFormState] = useState<MatchScoutingFormState>(EMPTY_FORM);
 
   // Use a ref so autoSave can always access current form values without stale closures
-  const formRef = useRef({ autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes });
+  const formRef = useRef<MatchScoutingFormState>(EMPTY_FORM);
   useEffect(() => {
-    formRef.current = { autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes };
-  }, [autonNotes, autonPath, teleopShotAttempts, playedDefense, defenseQuality, defenseNotes, notes]);
+    formRef.current = formState;
+  }, [formState]);
 
   useEffect(() => {
     if (!activeProfile) {
@@ -171,8 +142,13 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
         return false;
       }
 
-      const localKey = `matchScout:${assignment.matchNumber}:${assignment.teamNumber}`;
-      const existingRecord = storage.get<{ data?: MatchScoutData }>(localKey);
+      const existingRecord = getMatchScoutStorageKeyCandidates({
+        matchNumber: assignment.matchNumber,
+        teamNumber: assignment.teamNumber,
+      })
+        .map((key) => storage.get<{ data?: MatchScoutData }>(key))
+        .find((record) => Boolean(record));
+
       const existingEventKey = (existingRecord?.data?.eventKey || '').trim().toLowerCase();
       const activeEventKey = activeProfile.eventKey.trim().toLowerCase();
       return existingEventKey !== activeEventKey;
@@ -246,47 +222,37 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   // Reset team and form when match changes
   useEffect(() => {
     setSelectedTeamNumber('');
-    setAutonNotes('');
-    setAutonPath(null);
-    setTeleopShotAttempts([]);
-    setPlayedDefense(false);
-    setDefenseQuality('');
-    setDefenseNotes('');
-    setNotes('');
+    setFormState(EMPTY_FORM);
   }, [selectedMatchKey]);
 
   // Load saved data when team selection changes
   useEffect(() => {
     if (!selectedMatch || selectedTeamNumber === '') {
-      setAutonNotes('');
-      setAutonPath(null);
-      setTeleopShotAttempts([]);
-      setPlayedDefense(false);
-      setDefenseQuality('');
-      setDefenseNotes('');
-      setNotes('');
+      setFormState(EMPTY_FORM);
       return;
     }
 
-    const key = `matchScout:${selectedMatch.match_number}:${selectedTeamNumber}`;
-    const saved = storage.get<{ data?: EventMatchScoutData }>(key);
+    const saved = getMatchScoutStorageKeyCandidates({
+      matchKey: selectedMatch.key,
+      matchNumber: selectedMatch.match_number,
+      teamNumber: selectedTeamNumber,
+    })
+      .map((key) => storage.get<{ data?: EventMatchScoutData }>(key))
+      .find((record) => Boolean(record));
+
     if (saved?.data) {
       const d = saved.data;
-      setAutonNotes(d.autonNotes || '');
-      setAutonPath(d.autonPath || null);
-      setTeleopShotAttempts(Array.isArray(d.teleopShotAttempts) ? d.teleopShotAttempts : []);
-      setPlayedDefense(d.playedDefense || false);
-      setDefenseQuality(d.defenseQuality || '');
-      setDefenseNotes(d.defenseNotes || '');
-      setNotes(d.notes || '');
+      setFormState({
+        autonNotes: d.autonNotes || '',
+        autonPath: d.autonPath || null,
+        teleopShotAttempts: Array.isArray(d.teleopShotAttempts) ? d.teleopShotAttempts : [],
+        playedDefense: d.playedDefense || false,
+        defenseQuality: d.defenseQuality || '',
+        defenseNotes: d.defenseNotes || '',
+        notes: d.notes || '',
+      });
     } else {
-      setAutonNotes('');
-      setAutonPath(null);
-      setTeleopShotAttempts([]);
-      setPlayedDefense(false);
-      setDefenseQuality('');
-      setDefenseNotes('');
-      setNotes('');
+      setFormState(EMPTY_FORM);
     }
   }, [selectedTeamNumber, selectedMatch]);
 
@@ -374,13 +340,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
       `Saved team ${selectedTeamNumber} for ${formatMatchLabel(selectedMatch)}`,
     );
     setSelectedTeamNumber('');
-    setAutonNotes('');
-    setAutonPath(null);
-    setTeleopShotAttempts([]);
-    setPlayedDefense(false);
-    setDefenseQuality('');
-    setDefenseNotes('');
-    setNotes('');
+    setFormState(EMPTY_FORM);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -482,138 +442,17 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
         </div>
       </div>
 
-      {/* ── Autonomous ─────────────────────────────────────────────── */}
-      <div
-        className={`bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-6 transition-opacity ${
-          readyToScout ? 'opacity-100' : 'opacity-40 pointer-events-none'
-        }`}
-      >
-        <h2 className="text-2xl font-bold text-white">Autonomous</h2>
-
-        <AutonPathField
-          instanceId={`auton-${selectedMatchKey}-${selectedTeamNumber || 'none'}`}
-          mode="record"
-          allianceColor={getAllianceColor()}
-          value={autonPath}
-          enableTeleopShotMap
-          teleopShotAttempts={teleopShotAttempts}
-          onTeleopShotAttemptsChange={(next) => {
-            console.info('[EventMatchScouting] Persisting teleop shots', {
-              matchKey: selectedMatch?.key || null,
-              teamNumber: selectedTeamNumber || null,
-              shotCount: next.length,
-            });
-            setTeleopShotAttempts(next);
-            persist({ teleopShotAttempts: next });
-          }}
-          onChange={(next) => {
-            console.info('[EventMatchScouting] Persisting auton path', {
-              matchKey: selectedMatch?.key || null,
-              teamNumber: selectedTeamNumber || null,
-              points: next?.trajectoryPoints.length || 0,
-              durationMs: next?.durationMs || null,
-            });
-            setAutonPath(next);
-            persist({ autonPath: next });
-          }}
-        />
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
-            What did they do in auto?
-          </label>
-          <textarea
-            value={autonNotes}
-            onChange={(e) => {
-              setAutonNotes(e.target.value);
-              persist({ autonNotes: e.target.value });
-            }}
-            placeholder="Describe autonomous actions…"
-            className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-y"
-          />
-        </div>
-      </div>
-
-      {/* ── Defense ────────────────────────────────────────────────── */}
-      <div
-        className={`bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-6 transition-opacity ${
-          readyToScout ? 'opacity-100' : 'opacity-40 pointer-events-none'
-        }`}
-      >
-        <h2 className="text-2xl font-bold text-white">Defense</h2>
-
-        <Toggle
-          label="Played Defense?"
-          value={playedDefense}
-          onChange={(v) => {
-            setPlayedDefense(v);
-            persist({ playedDefense: v });
-          }}
-        />
-
-        {playedDefense && (
-          <div className="space-y-4">
-            <MultiToggle<DefenseQuality>
-              label="Defense Quality"
-              options={['Good', 'Bad']}
-              value={defenseQuality}
-              onChange={(v) => {
-                setDefenseQuality(v);
-                persist({ defenseQuality: v });
-              }}
-            />
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300">
-                Describe their defense (include if it was good or bad)
-              </label>
-              <textarea
-                value={defenseNotes}
-                onChange={(e) => {
-                  setDefenseNotes(e.target.value);
-                  persist({ defenseNotes: e.target.value });
-                }}
-                placeholder="Example: Good lane denial and smart pin timing, or bad positioning and missed assignments..."
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-y"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Notes ──────────────────────────────────────────────────── */}
-      <div
-        className={`bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-6 transition-opacity ${
-          readyToScout ? 'opacity-100' : 'opacity-40 pointer-events-none'
-        }`}
-      >
-        <h2 className="text-2xl font-bold text-white">Notes</h2>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">Additional notes</label>
-          <textarea
-            value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value);
-              persist({ notes: e.target.value });
-            }}
-            placeholder="Any other observations…"
-            className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 min-h-[80px] resize-y"
-          />
-        </div>
-      </div>
-
-      {/* ── Save button ─────────────────────────────────────────────── */}
-      <div className="flex justify-end pt-4">
-        <button
-          onClick={handleSave}
-          disabled={!readyToScout}
-          className="flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-600/20 w-full sm:w-auto justify-center text-lg"
-        >
-          <Save className="w-6 h-6" />
-          Save & Next
-        </button>
-      </div>
+      <MatchScoutingSections
+        readyToScout={readyToScout}
+        selectedMatchKey={selectedMatchKey}
+        selectedTeamNumber={selectedTeamNumber}
+        allianceColor={getAllianceColor()}
+        formState={formState}
+        onFormStateChange={setFormState}
+        onPersist={persist}
+        onSave={handleSave}
+        saveDisabled={!readyToScout}
+      />
     </div>
   );
 }

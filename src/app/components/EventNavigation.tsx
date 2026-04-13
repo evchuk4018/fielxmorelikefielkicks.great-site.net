@@ -9,6 +9,9 @@ import {
   LayoutGrid,
   LogOut,
   DraftingCompass,
+  House,
+  Table2,
+  Video,
 } from 'lucide-react';
 import { SyncIndicator } from '../../components/SyncIndicator';
 import { CompetitionProfile } from '../../types';
@@ -23,6 +26,7 @@ type EventNavigationProps = {
   onSetActiveTab: (tab: EventTab) => void;
   onSignOut: () => void;
   onOpenSettings: () => void;
+  onGoHome: () => void;
 };
 
 function TabButton(props: {
@@ -55,6 +59,7 @@ export function EventNavigation(props: EventNavigationProps) {
     onSetActiveTab,
     onSignOut,
     onOpenSettings,
+    onGoHome,
   } = props;
 
   return (
@@ -118,6 +123,21 @@ export function EventNavigation(props: EventNavigationProps) {
               />
             )}
           </div>
+        ) : location === 'prescouting' ? (
+          <div className="flex items-center gap-1 sm:gap-2">
+            <TabButton
+              active={activeTab === 'prescouting-match'}
+              label="Match Scouting"
+              onClick={() => onSetActiveTab('prescouting-match')}
+              icon={<Video className="w-4 h-4" />}
+            />
+            <TabButton
+              active={activeTab === 'prescouting-coverage'}
+              label="Coverage"
+              onClick={() => onSetActiveTab('prescouting-coverage')}
+              icon={<Table2 className="w-4 h-4" />}
+            />
+          </div>
         ) : (
           <div className="hidden sm:flex items-center text-sm text-slate-400">
             <span>Create or select an event folder to start scouting.</span>
@@ -125,6 +145,15 @@ export function EventNavigation(props: EventNavigationProps) {
         )}
 
         <div className="flex items-center gap-3">
+          {location !== 'home' && (
+            <button
+              onClick={onGoHome}
+              className="inline-flex items-center gap-1 px-2 py-1.5 text-xs border border-slate-700 text-slate-200 rounded-lg hover:border-slate-500"
+            >
+              <House className="w-3.5 h-3.5" />
+              Home
+            </button>
+          )}
           {activeProfile && (
             <div className="hidden lg:flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs">
               <span className="text-slate-400">Selected:</span>

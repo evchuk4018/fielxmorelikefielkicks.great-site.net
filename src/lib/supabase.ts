@@ -173,6 +173,13 @@ type MatchCoverageEntry = {
   matchKey?: string;
 };
 
+export type ScoutedMatchEntry = {
+  teamNumber: number;
+  matchNumber: number | null;
+  eventKey: string;
+  matchKey: string;
+};
+
 function normalizeJsonPayload(value: unknown): unknown {
   if (typeof value === 'string') {
     try {
@@ -208,6 +215,47 @@ function asNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function extractEventKeyFromMatchKey(matchKey: string): string {
+  const normalizedMatchKey = matchKey.trim().toLowerCase();
+  const separatorIndex = normalizedMatchKey.indexOf('_');
+  if (separatorIndex <= 0) {
+    return '';
+  }
+
+  return normalizedMatchKey.slice(0, separatorIndex);
+}
+
+export async function listAllScoutedMatchEntries(): Promise<ScoutedMatchEntry[]> {
+  const { data, error } = await supabase
+    .from('match_scouts')
+    .select('team_number, match_number, data');
+
+  if (error) {
+    throw new Error(error.message || 'Failed to load scouted match entries.');
+  }
+
+  return ((data || []) as MatchCoverageRow[])
+    .map((row) => {
+      const payload = asObject(normalizeJsonPayload(row.data));
+      const teamNumber = row.team_number ?? asNumber(payload?.teamNumber);
+      if (teamNumber === null || !Number.isInteger(teamNumber) || teamNumber <= 0) {
+        return null;
+      }
+
+      const matchNumber = row.match_number ?? asNumber(payload?.matchNumber);
+      const normalizedMatchKey = asString(payload?.matchKey).trim().toLowerCase();
+      const eventKeyFromPayload = asString(payload?.eventKey).trim().toLowerCase();
+
+      return {
+        teamNumber,
+        matchNumber,
+        eventKey: eventKeyFromPayload || extractEventKeyFromMatchKey(normalizedMatchKey),
+        matchKey: normalizedMatchKey,
+      } as ScoutedMatchEntry;
+    })
+    .filter((entry): entry is ScoutedMatchEntry => Boolean(entry));
 }
 
 export async function listMatchCoverageRowsForEvent(eventKey: string): Promise<MatchCoverageEntry[]> {

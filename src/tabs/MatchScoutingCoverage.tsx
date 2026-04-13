@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { compLevelSortOrder, formatMatchLabel, toTeamNumber } from '../lib/matchUtils';
 import { listMatchCoverageRowsForEvent } from '../lib/supabase';
 import { tba } from '../lib/tba';
 import { TBAMatch, TBATeam } from '../types';
@@ -23,36 +24,6 @@ type MatchColumn = {
   label: string;
   teamNumbers: Set<number>;
 };
-
-function toTeamNumber(teamKey: string): number {
-  return Number(teamKey.replace('frc', ''));
-}
-
-function compLevelSortOrder(compLevel: string): number {
-  switch (compLevel) {
-    case 'qm':
-      return 0;
-    case 'ef':
-      return 1;
-    case 'qf':
-      return 2;
-    case 'sf':
-      return 3;
-    case 'f':
-      return 4;
-    default:
-      return 5;
-  }
-}
-
-function formatMatchLabel(match: TBAMatch): string {
-  const compLabel = match.comp_level.toUpperCase();
-  if (match.comp_level === 'qm') {
-    return `QM ${match.match_number}`;
-  }
-
-  return `${compLabel} ${match.set_number}-${match.match_number}`;
-}
 
 function createCellKey(matchKey: string, teamNumber: number): string {
   return `${matchKey}|${teamNumber}`;

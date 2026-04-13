@@ -8,6 +8,7 @@ type HomeProps = {
   isCreatingProfile: boolean;
   onCreateProfile: () => void;
   onSelectProfile: (profileId: string) => void;
+  onOpenPrescouting: () => void;
 };
 
 export function Home({
@@ -16,6 +17,7 @@ export function Home({
   isCreatingProfile,
   onCreateProfile,
   onSelectProfile,
+  onOpenPrescouting,
 }: HomeProps) {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -28,14 +30,22 @@ export function Home({
               Start by creating or selecting a competition profile. Each event key opens its own scouting pages.
             </p>
           </div>
-          <button
-            onClick={onCreateProfile}
-            disabled={isCreatingProfile}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold shadow-lg shadow-emerald-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            {isCreatingProfile ? 'Creating...' : 'Add Profile'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenPrescouting}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-500/20"
+            >
+              Prescouting
+            </button>
+            <button
+              onClick={onCreateProfile}
+              disabled={isCreatingProfile}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold shadow-lg shadow-emerald-500/20"
+            >
+              <Plus className="w-4 h-4" />
+              {isCreatingProfile ? 'Creating...' : 'Add Profile'}
+            </button>
+          </div>
         </div>
       </section>
 

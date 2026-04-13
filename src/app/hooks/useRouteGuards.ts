@@ -45,11 +45,13 @@ export function useRouteGuards(params: UseRouteGuardsParams) {
     if (isScoutSignedIn && activeTab === 'pit') {
       setActiveTab('match');
     }
-  }, [signedInUserProfile, isScoutSignedIn, activeTab, setActiveTab]);
 
-  useEffect(() => {
-    if (isScoutSignedIn) {
-      setLocation('event');
+    if (location === 'prescouting' && activeTab !== 'prescouting-match' && activeTab !== 'prescouting-coverage') {
+      setActiveTab('prescouting-match');
     }
-  }, [isScoutSignedIn, setLocation]);
+
+    if (location === 'event' && (activeTab === 'prescouting-match' || activeTab === 'prescouting-coverage')) {
+      setActiveTab(isScoutSignedIn ? 'match' : 'pit');
+    }
+  }, [signedInUserProfile, isScoutSignedIn, activeTab, setActiveTab, location]);
 }

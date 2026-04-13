@@ -369,8 +369,11 @@ export function asAutonPathData(value: unknown): AutonPathData | null {
     return null;
   }
 
+  const resolvedStartPosition: AutonPathData['startPosition'] =
+    parsedStartPosition || fallbackStartFromTrajectory || { x: 0.5, y: 0.5 };
+
   return {
-    startPosition: parsedStartPosition || fallbackStartFromTrajectory,
+    startPosition: resolvedStartPosition,
     startSlot: typeof startSlot === 'string' ? (startSlot as AutonPathData['startSlot']) : undefined,
     capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : new Date(0).toISOString(),
     durationMs,

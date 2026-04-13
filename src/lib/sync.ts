@@ -137,7 +137,14 @@ export const syncManager = {
           },
         } as SyncRecord<any>;
 
-        const key = `matchScout:${record.data.matchNumber}:${record.data.teamNumber}`;
+        const matchNumber = toNullableNumber(record.data.matchNumber);
+        const teamNumber = toNullableNumber(record.data.teamNumber);
+        if (matchNumber === null || teamNumber === null) {
+          return;
+        }
+
+        const key = `matchScout:${matchNumber}:${teamNumber}`;
+
         const localRecord = storage.get<SyncRecord<any>>(key);
         if (!localRecord || record.timestamp > localRecord.timestamp) {
           storage.set(key, record);
@@ -238,7 +245,8 @@ export const syncManager = {
           validated: Boolean((record.data as any)?.validated),
           data: record.data,
           updated_at: new Date(record.timestamp).toISOString(),
-        }));
+        }))
+        .filter((row) => row.match_number !== null && row.team_number !== null);
 
       const [pitResult, matchResult] = await Promise.all([
         pitRows.length > 0 ? supabase.from('pit_scouts').upsert(pitRows, { onConflict: 'event_key,team_number' }) : Promise.resolve({ error: null }),

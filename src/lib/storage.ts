@@ -3,6 +3,88 @@ import { SyncRecord } from '../types';
 
 const SYNC_QUEUE_KEY = 'syncQueue';
 
+type MatchScoutKeyInput = {
+  teamNumber: number | string;
+  matchNumber?: number | string | null;
+  matchKey?: string | null;
+};
+
+function toMatchScoutKeyNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeMatchScoutMatchKey(value: string | null | undefined): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().toLowerCase();
+}
+
+function getDeterministicMatchScoutId(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null;
+  }
+
+  const payload = data as Record<string, unknown>;
+  const teamNumber = toMatchScoutKeyNumber(payload.teamNumber as number | string | null | undefined);
+  const matchKey = normalizeMatchScoutMatchKey(payload.matchKey as string | null | undefined);
+  if (!teamNumber || !matchKey) {
+    return null;
+  }
+
+  return `matchScout:${teamNumber}:${matchKey}`;
+}
+
+export function buildMatchScoutStorageKey(input: MatchScoutKeyInput): string {
+  const teamNumber = toMatchScoutKeyNumber(input.teamNumber);
+  if (!teamNumber) {
+    throw new Error('A valid team number is required for match scout storage key');
+  }
+
+  const matchKey = normalizeMatchScoutMatchKey(input.matchKey);
+  if (matchKey) {
+    return `matchScout:${matchKey}:${teamNumber}`;
+  }
+
+  const matchNumber = toMatchScoutKeyNumber(input.matchNumber);
+  if (!matchNumber) {
+    throw new Error('A valid match number or match key is required for match scout storage key');
+  }
+
+  return `matchScout:${matchNumber}:${teamNumber}`;
+}
+
+export function getMatchScoutStorageKeyCandidates(input: MatchScoutKeyInput): string[] {
+  const teamNumber = toMatchScoutKeyNumber(input.teamNumber);
+  if (!teamNumber) {
+    return [];
+  }
+
+  const keys: string[] = [];
+  const matchKey = normalizeMatchScoutMatchKey(input.matchKey);
+  const matchNumber = toMatchScoutKeyNumber(input.matchNumber);
+
+  if (matchKey) {
+    keys.push(`matchScout:${matchKey}:${teamNumber}`);
+  }
+
+  if (matchNumber) {
+    keys.push(`matchScout:${matchNumber}:${teamNumber}`);
+  }
+
+  return Array.from(new Set(keys));
+}
+
 export function get<T>(key: string): T | null {
   const item = localStorage.getItem(key);
   return item ? JSON.parse(item) : null;
@@ -30,9 +112,10 @@ export function getKeysByPrefix(prefixes: string | string[]): string[] {
 
 export function saveRecord<T>(type: 'pitScout' | 'matchScout', key: string, data: T): void {
   const existingRecord = get<SyncRecord<T>>(key);
+  const deterministicId = type === 'matchScout' ? getDeterministicMatchScoutId(data) : null;
   
   const record: SyncRecord<T> = {
-    id: existingRecord?.id || uuidv4(),
+    id: existingRecord?.id || deterministicId || uuidv4(),
     type,
     timestamp: Date.now(),
     data,
@@ -100,6 +183,8 @@ export const storage = {
   set,
   getAllKeys,
   getKeysByPrefix,
+  buildMatchScoutStorageKey,
+  getMatchScoutStorageKeyCandidates,
   saveRecord,
   getSyncQueue,
   removeFromSyncQueue,

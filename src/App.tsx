@@ -195,6 +195,11 @@ export default function App() {
     setLocation('home');
   };
 
+  const handleOpenPrescouting = () => {
+    setLocation('prescouting');
+    setActiveTab('prescouting-match');
+  };
+
   const handleCreateProfile = async () => {
     await createCompetitionProfile({
       isAdminSignedIn,
@@ -308,6 +313,7 @@ export default function App() {
               void handleSignOutUserProfile();
             }}
             onOpenSettings={() => setIsSettingsOpen(true)}
+            onGoHome={handleGoHome}
           />
 
           <main className="p-4 sm:p-6 lg:p-8">
@@ -326,6 +332,7 @@ export default function App() {
               onSelectProfile={handleSelectProfile}
               onBanScout={handleBanScout}
               onUnbanScout={handleUnbanScout}
+              onOpenPrescouting={handleOpenPrescouting}
             />
           </main>
 

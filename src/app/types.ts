@@ -1,8 +1,17 @@
 import { UserRole } from '../types';
 
-export type Location = 'home' | 'event';
+export type Location = 'home' | 'event' | 'prescouting';
 
-export type EventTab = 'pit' | 'match' | 'strategy' | 'alliance' | 'raw' | 'admin' | 'coverage';
+export type EventTab =
+  | 'pit'
+  | 'match'
+  | 'strategy'
+  | 'alliance'
+  | 'raw'
+  | 'admin'
+  | 'coverage'
+  | 'prescouting-match'
+  | 'prescouting-coverage';
 
 export type FaceIdMode = 'train' | 'test';
 

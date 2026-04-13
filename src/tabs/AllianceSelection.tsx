@@ -122,7 +122,7 @@ function readPickedTeams(key: string): number[] {
     new Set(
       stored
         .map((value) => toFiniteNumber(value))
-        .filter((value): value is number => Boolean(value) && Number.isInteger(value) && value > 0),
+        .filter((value): value is number => value !== null && Number.isInteger(value) && value > 0),
     ),
   ).sort((a, b) => a - b);
 }
