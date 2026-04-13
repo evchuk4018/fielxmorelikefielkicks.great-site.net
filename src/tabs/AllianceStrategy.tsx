@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RawData } from './RawData';
 import { FieldHeatmap } from '../components/FieldHeatmap';
-import { alignPointBetweenAlliances, buildHeatmapBins } from '../lib/heatmapUtils';
+import { alignPointBetweenAlliances } from '../lib/heatmapUtils';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { MatchScoutData, SyncRecord } from '../types';
@@ -41,14 +41,11 @@ type TeamShotPoint = {
 };
 
 type TeamHeatmapSummary = {
-  bins: number[];
-  maxBin: number;
+  shotPoints: Array<{ x: number; y: number }>;
   totalShots: number;
 };
 
 const LOCKED_TEAM_NUMBER = 423;
-const TELEOP_HEATMAP_COLS = 24;
-const TELEOP_HEATMAP_ROWS = 12;
 
 function parseEventYear(eventKey: string): number | null {
   const match = eventKey.trim().match(/^(\d{4})/);
@@ -486,7 +483,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
   const redTotals = getAllianceTotals(redTeams);
 
   const summarizeAllianceTeleopHeatmap = (teams: number[], targetAlliance: 'Red' | 'Blue'): TeamHeatmapSummary => {
-    const points = teams.flatMap((teamNumber) => {
+    const shotPoints = teams.flatMap((teamNumber) => {
       const teamPoints = teamTeleopShots[teamNumber] || [];
       return teamPoints.map((point) => {
         return alignPointBetweenAlliances(
@@ -497,11 +494,9 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
       });
     });
 
-    const bins = buildHeatmapBins(points, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
     return {
-      bins,
-      maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
-      totalShots: points.length,
+      shotPoints,
+      totalShots: shotPoints.length,
     };
   };
 
@@ -552,14 +547,12 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     const teamHeatmap: TeamHeatmapSummary | null = teamNumber
       ? (() => {
           const teamPoints = teamTeleopShots[teamNumber] || [];
-          const aligned = teamPoints.map((point) => {
+          const shotPoints = teamPoints.map((point) => {
             return alignPointBetweenAlliances({ x: point.x, y: point.y }, point.allianceColor, targetAlliance);
           });
-          const bins = buildHeatmapBins(aligned, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
           return {
-            bins,
-            maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
-            totalShots: aligned.length,
+            shotPoints,
+            totalShots: shotPoints.length,
           };
         })()
       : null;
@@ -614,12 +607,9 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
 
         {teamHeatmap && (
           <div className="mt-3 space-y-1">
-            <p className="text-xs text-slate-300">Teleop Shot Heatmap ({teamHeatmap.totalShots})</p>
+            <p className="text-xs text-slate-300">Teleop Raw Shot Map ({teamHeatmap.totalShots})</p>
             <FieldHeatmap
-              bins={teamHeatmap.bins}
-              cols={TELEOP_HEATMAP_COLS}
-              rows={TELEOP_HEATMAP_ROWS}
-              maxBin={teamHeatmap.maxBin}
+              points={teamHeatmap.shotPoints}
               totalShots={teamHeatmap.totalShots}
               color={isBlue ? '#60a5fa' : '#f87171'}
               emptyMessage="No teleop taps"
@@ -664,12 +654,9 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
         )}
 
         <div className="mt-4 space-y-2">
-          <p className="text-xs text-slate-300">Alliance Teleop Heatmap</p>
+          <p className="text-xs text-slate-300">Alliance Teleop Raw Shot Map</p>
           <FieldHeatmap
-            bins={isBlue ? blueHeatmap.bins : redHeatmap.bins}
-            cols={TELEOP_HEATMAP_COLS}
-            rows={TELEOP_HEATMAP_ROWS}
-            maxBin={isBlue ? blueHeatmap.maxBin : redHeatmap.maxBin}
+            points={isBlue ? blueHeatmap.shotPoints : redHeatmap.shotPoints}
             totalShots={isBlue ? blueHeatmap.totalShots : redHeatmap.totalShots}
             color={isBlue ? '#60a5fa' : '#f87171'}
             emptyMessage="No teleop taps for this alliance setup yet."
@@ -800,3 +787,5 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     </div>
   );
 }
+
+

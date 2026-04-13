@@ -4,8 +4,6 @@ import {
   AUTON_FIELD_HEIGHT,
   AUTON_FIELD_OVERLAY_SRC,
   AUTON_FIELD_WIDTH,
-  TELEOP_HEATMAP_COLS,
-  TELEOP_HEATMAP_ROWS,
 } from '../constants';
 import { TeleopSummary } from '../types';
 import { SectionCard } from './RawDataPrimitives';
@@ -18,7 +16,7 @@ export const TeleopHeatmapSection = React.memo(function TeleopHeatmapSection({
   selectedTeamTeleopSummary,
 }: TeleopHeatmapSectionProps) {
   return (
-    <SectionCard title="Teleop Shot Heatmap">
+    <SectionCard title="Teleop Raw Shot Map">
       <p className="text-xs text-slate-400">Tap-mapped teleop shot attempts from all saved match scouts for this team.</p>
 
       <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 space-y-2">
@@ -28,10 +26,7 @@ export const TeleopHeatmapSection = React.memo(function TeleopHeatmapSection({
         </div>
 
         <FieldHeatmap
-          bins={selectedTeamTeleopSummary.shotBins}
-          cols={TELEOP_HEATMAP_COLS}
-          rows={TELEOP_HEATMAP_ROWS}
-          maxBin={selectedTeamTeleopSummary.maxShotBin}
+          points={selectedTeamTeleopSummary.shotPoints}
           totalShots={selectedTeamTeleopSummary.totalShots}
           width={AUTON_FIELD_WIDTH}
           height={AUTON_FIELD_HEIGHT}

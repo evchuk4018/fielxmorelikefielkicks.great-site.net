@@ -5,8 +5,6 @@ import {
   AUTON_FIELD_HEIGHT,
   AUTON_FIELD_OVERLAY_SRC,
   AUTON_FIELD_WIDTH,
-  AUTON_HEATMAP_COLS,
-  AUTON_HEATMAP_ROWS,
 } from '../constants';
 import { StripSummary, TeamDisplay } from '../types';
 import { SectionCard } from './RawDataPrimitives';
@@ -24,7 +22,7 @@ export const AutonTendenciesSection = React.memo(function AutonTendenciesSection
     <SectionCard title="Autonomous Tendencies (Averaged)">
       <p className="text-xs text-slate-400">
         Paths are grouped by starting Y position in three equal horizontal strips, then averaged on normalized time.
-        Heatmaps show where autonomous shots cluster for each strip.
+        Shot maps show all raw autonomous shot positions for each strip.
       </p>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -55,15 +53,12 @@ export const AutonTendenciesSection = React.memo(function AutonTendenciesSection
         {stripSummaries.map((summary) => (
           <div key={`${summary.key}-heat`} className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-100">{summary.label} Shot Heatmap</p>
+              <p className="text-sm font-semibold text-slate-100">{summary.label} Raw Shot Map</p>
               <p className="text-xs text-slate-400">Shots: {summary.totalShots}</p>
             </div>
 
             <FieldHeatmap
-              bins={summary.shotBins}
-              cols={AUTON_HEATMAP_COLS}
-              rows={AUTON_HEATMAP_ROWS}
-              maxBin={summary.maxShotBin}
+              points={summary.shotPoints}
               totalShots={summary.totalShots}
               width={AUTON_FIELD_WIDTH}
               height={AUTON_FIELD_HEIGHT}

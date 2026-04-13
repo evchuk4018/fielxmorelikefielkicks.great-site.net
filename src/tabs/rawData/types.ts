@@ -71,8 +71,7 @@ export type StripSummary = {
   avgPath: NormalizedPoint[];
   replayPath: AutonPathData | null;
   dominantAlliance: 'Red' | 'Blue' | '';
-  shotBins: number[];
-  maxShotBin: number;
+  shotPoints: NormalizedPoint[];
 };
 
 export type StripRunSample = {
@@ -102,8 +101,7 @@ export type TeamDisplay = {
 };
 
 export type TeleopSummary = {
-  shotBins: number[];
-  maxShotBin: number;
+  shotPoints: NormalizedPoint[];
   totalShots: number;
   dominantAlliance: 'Red' | 'Blue' | '';
 };

@@ -1,9 +1,5 @@
-import { alignPointBetweenAlliances, buildHeatmapBins } from '../../lib/heatmapUtils';
+import { alignPointBetweenAlliances } from '../../lib/heatmapUtils';
 import { AutonPathData, MatchScoutData, PitScoutData } from '../../types';
-import {
-  AUTON_HEATMAP_COLS,
-  AUTON_HEATMAP_ROWS,
-} from './constants';
 import {
   MatchNotesBundle,
   MetricKey,
@@ -473,13 +469,5 @@ export function buildMatchNotesBundle(payloads: Partial<MatchScoutData>[]): Matc
     autonNotes,
     defenseNotes,
     generalNotes,
-  };
-}
-
-export function buildAutonBins(shots: NormalizedPoint[]): { bins: number[]; maxBin: number } {
-  const bins = buildHeatmapBins(shots, AUTON_HEATMAP_COLS, AUTON_HEATMAP_ROWS);
-  return {
-    bins,
-    maxBin: bins.reduce((max, value) => Math.max(max, value), 0),
   };
 }

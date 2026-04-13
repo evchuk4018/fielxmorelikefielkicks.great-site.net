@@ -1,24 +1,36 @@
 import React from 'react';
 
 type FieldHeatmapProps = {
-  bins: number[];
-  cols: number;
-  rows: number;
-  maxBin: number;
-  totalShots: number;
+  points: Array<{ x: number; y: number }>;
+  totalShots?: number;
   color?: string;
   overlaySrc?: string;
   width?: number;
   height?: number;
   showHorizontalThirds?: boolean;
   emptyMessage?: string;
+  pointRadius?: number;
+  overlapBucketPx?: number;
 };
 
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  if (value < 0) {
+    return 0;
+  }
+
+  if (value > 1) {
+    return 1;
+  }
+
+  return value;
+}
+
 export const FieldHeatmap = React.memo(function FieldHeatmap({
-  bins,
-  cols,
-  rows,
-  maxBin,
+  points,
   totalShots,
   color = '#f43f5e',
   overlaySrc = '/auton-field-overlay.svg',
@@ -26,7 +38,28 @@ export const FieldHeatmap = React.memo(function FieldHeatmap({
   height = 540,
   showHorizontalThirds = false,
   emptyMessage = 'No shot attempts captured yet.',
+  pointRadius = 8,
+  overlapBucketPx = 14,
 }: FieldHeatmapProps) {
+  const normalizedPoints = points.map((point) => {
+    return {
+      x: clamp01(point.x),
+      y: clamp01(point.y),
+    };
+  });
+
+  const densityByBucket = new Map<string, number>();
+  normalizedPoints.forEach((point) => {
+    const x = point.x * width;
+    const y = point.y * height;
+    const bucketX = Math.round(x / overlapBucketPx);
+    const bucketY = Math.round(y / overlapBucketPx);
+    const key = `${bucketX}:${bucketY}`;
+    densityByBucket.set(key, (densityByBucket.get(key) || 0) + 1);
+  });
+
+  const resolvedTotalShots = typeof totalShots === 'number' ? totalShots : normalizedPoints.length;
+
   return (
     <div className="space-y-2">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full rounded-lg border border-slate-700 bg-slate-950/70">
@@ -65,32 +98,26 @@ export const FieldHeatmap = React.memo(function FieldHeatmap({
           </>
         )}
 
-        {bins.map((count, index) => {
-          if (count <= 0 || maxBin <= 0) {
-            return null;
-          }
+        {normalizedPoints.map((point, index) => {
+          const x = point.x * width;
+          const y = point.y * height;
+          const bucketX = Math.round(x / overlapBucketPx);
+          const bucketY = Math.round(y / overlapBucketPx);
+          const key = `${bucketX}:${bucketY}`;
+          const overlapCount = densityByBucket.get(key) || 1;
 
-          const col = index % cols;
-          const row = Math.floor(index / cols);
-          const cellWidth = width / cols;
-          const cellHeight = height / rows;
-          const intensity = count / maxBin;
+          const opacity = Math.min(0.92, 0.22 + (overlapCount - 1) * 0.18);
 
           return (
-            <rect
-              key={`bin-${index}`}
-              x={col * cellWidth}
-              y={row * cellHeight}
-              width={cellWidth}
-              height={cellHeight}
-              fill={color}
-              opacity={0.12 + intensity * 0.58}
-            />
+            <g key={`shot-${index}-${bucketX}-${bucketY}`}>
+              <circle cx={x} cy={y} r={pointRadius} fill={color} opacity={opacity} />
+              <circle cx={x} cy={y} r={Math.max(2, pointRadius * 0.32)} fill="#f8fafc" opacity={0.55} />
+            </g>
           );
         })}
       </svg>
 
-      {totalShots === 0 && <p className="text-xs text-slate-500">{emptyMessage}</p>}
+      {resolvedTotalShots === 0 && <p className="text-xs text-slate-500">{emptyMessage}</p>}
     </div>
   );
 });

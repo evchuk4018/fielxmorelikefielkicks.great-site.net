@@ -1,13 +1,8 @@
 import { useDeferredValue, useMemo, useRef } from 'react';
-import { buildHeatmapBins } from '../../../lib/heatmapUtils';
 import {
-  AUTON_HEATMAP_COLS,
-  AUTON_HEATMAP_ROWS,
   METRIC_META,
   PATH_SAMPLE_COUNT,
   STRIP_ORDER,
-  TELEOP_HEATMAP_COLS,
-  TELEOP_HEATMAP_ROWS,
 } from '../constants';
 import {
   EntryCounts,
@@ -252,7 +247,6 @@ export function useRawDataDerived({
       }
 
       const allShots = alignedRuns.flatMap((run) => run.shots);
-      const shotBins = buildHeatmapBins(allShots, AUTON_HEATMAP_COLS, AUTON_HEATMAP_ROWS);
 
       return {
         key: stripConfig.key,
@@ -262,8 +256,7 @@ export function useRawDataDerived({
         avgPath,
         replayPath: buildReplayPath(avgPath, allShots),
         dominantAlliance: targetAlliance,
-        shotBins,
-        maxShotBin: shotBins.reduce((max, value) => Math.max(max, value), 0),
+        shotPoints: allShots,
       };
     });
 
@@ -314,11 +307,8 @@ export function useRawDataDerived({
       return run.shots.map((shot) => alignPointToAlliance(shot, run.allianceColor, targetAlliance));
     });
 
-    const shotBins = buildHeatmapBins(alignedShots, TELEOP_HEATMAP_COLS, TELEOP_HEATMAP_ROWS);
-
     const computed: TeleopSummary = {
-      shotBins,
-      maxShotBin: shotBins.reduce((max, value) => Math.max(max, value), 0),
+      shotPoints: alignedShots,
       totalShots: alignedShots.length,
       dominantAlliance: targetAlliance,
     };
