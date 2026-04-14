@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, RefreshCw, Trash2 } from 'lucide-react';
+import { AutonPathField } from '../components/AutonPathField';
 import { showToast } from '../components/Toast';
 import { storage } from '../lib/storage';
 import { deleteMatchScoutById, supabase } from '../lib/supabase';
-import { MatchScoutData, SyncRecord } from '../types';
+import { AllianceColor, AutonPathData, MatchScoutData, SyncRecord } from '../types';
+import { TeleopShotField } from './rawData/components/TeleopShotField';
 
 type GlobalMatchRow = {
   id: string;
@@ -28,6 +30,185 @@ type SupabaseMatchRow = {
   data: unknown;
   updated_at?: string | null;
 };
+
+type RawMatchPoint = {
+  x: number;
+  y: number;
+  timestampMs: number;
+};
+
+const START_SLOTS = new Set(['R1', 'R2', 'R3', 'B1', 'B2', 'B3']);
+
+type RawPointTableProps = {
+  title: string;
+  points: RawMatchPoint[];
+  emptyMessage: string;
+};
+
+function RawPointTable({ title, points, emptyMessage }: RawPointTableProps) {
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <p className="text-xs text-slate-400">{points.length}</p>
+      </div>
+
+      {points.length === 0 ? (
+        <p className="text-xs text-slate-500">{emptyMessage}</p>
+      ) : (
+        <div className="max-h-52 overflow-auto rounded-lg border border-slate-700">
+          <table className="min-w-full text-xs text-slate-200">
+            <thead className="sticky top-0 bg-slate-900/95 border-b border-slate-700">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-300">#</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-300">Time (ms)</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-300">X</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-slate-300">Y</th>
+              </tr>
+            </thead>
+            <tbody>
+              {points.map((point, index) => (
+                <tr key={`${title}-${index}-${point.timestampMs}`} className="border-b border-slate-800 last:border-b-0">
+                  <td className="px-2 py-1.5 text-slate-400">{index + 1}</td>
+                  <td className="px-2 py-1.5 font-mono">{Math.round(point.timestampMs)}</td>
+                  <td className="px-2 py-1.5 font-mono">{point.x.toFixed(4)}</td>
+                  <td className="px-2 py-1.5 font-mono">{point.y.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  if (value < 0) {
+    return 0;
+  }
+
+  if (value > 1) {
+    return 1;
+  }
+
+  return value;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeRawPoint(value: unknown, fallbackTimestampMs: number): RawMatchPoint | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const point = value as Record<string, unknown>;
+  const x = toNumber(point.x);
+  const y = toNumber(point.y);
+
+  if (x === null || y === null) {
+    return null;
+  }
+
+  return {
+    x: clamp01(x),
+    y: clamp01(y),
+    timestampMs: toNumber(point.timestampMs) ?? fallbackTimestampMs,
+  };
+}
+
+function normalizeRawPoints(value: unknown): RawMatchPoint[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((point, index) => normalizeRawPoint(point, index * 1000))
+    .filter((point): point is RawMatchPoint => Boolean(point));
+}
+
+function normalizeAllianceColor(value: unknown): AllianceColor | '' {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'red') {
+    return 'Red';
+  }
+  if (normalized === 'blue') {
+    return 'Blue';
+  }
+  return '';
+}
+
+function normalizeAutonPath(value: unknown): AutonPathData | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const trajectoryPoints = normalizeRawPoints(payload.trajectoryPoints);
+
+  if (trajectoryPoints.length === 0) {
+    return null;
+  }
+
+  const shotAttempts = normalizeRawPoints(payload.shotAttempts);
+  const startPositionPayload = payload.startPosition;
+
+  let startPosition = {
+    x: trajectoryPoints[0].x,
+    y: trajectoryPoints[0].y,
+  };
+
+  if (startPositionPayload && typeof startPositionPayload === 'object' && !Array.isArray(startPositionPayload)) {
+    const rawStart = startPositionPayload as Record<string, unknown>;
+    const startX = toNumber(rawStart.x);
+    const startY = toNumber(rawStart.y);
+
+    if (startX !== null && startY !== null) {
+      startPosition = {
+        x: clamp01(startX),
+        y: clamp01(startY),
+      };
+    }
+  }
+
+  const durationMsCandidate = toNumber(payload.durationMs);
+  const fallbackDurationMs = Math.max(0, trajectoryPoints[trajectoryPoints.length - 1].timestampMs);
+  const durationMs = durationMsCandidate !== null && durationMsCandidate > 0 ? durationMsCandidate : fallbackDurationMs;
+  const capturedAt = typeof payload.capturedAt === 'string' && payload.capturedAt.trim() ? payload.capturedAt : '1970-01-01T00:00:00.000Z';
+  const startSlotCandidate = typeof payload.startSlot === 'string' ? payload.startSlot.trim().toUpperCase() : '';
+  const startSlot = START_SLOTS.has(startSlotCandidate)
+    ? (startSlotCandidate as NonNullable<AutonPathData['startSlot']>)
+    : undefined;
+
+  return {
+    startPosition,
+    startSlot,
+    capturedAt,
+    durationMs,
+    trajectoryPoints,
+    shotAttempts,
+    fieldVersion: '2026-field-v1',
+  };
+}
 
 function normalizePayload(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -345,8 +526,13 @@ export function AdminGlobalMatchData() {
           {filteredRows.map((row) => {
             const isPendingDelete = Boolean(pendingDeletes[row.id]);
             const isExpanded = Boolean(expandedRows[row.id]);
-            const teleopShotCount = Array.isArray(row.payload.teleopShotAttempts) ? row.payload.teleopShotAttempts.length : 0;
-            const hasAutonPath = Boolean(row.payload.autonPath);
+            const teleopShotPoints = normalizeRawPoints(row.payload.teleopShotAttempts);
+            const teleopShotCount = teleopShotPoints.length;
+            const autonPath = normalizeAutonPath(row.payload.autonPath);
+            const autonTrajectoryPoints = autonPath?.trajectoryPoints || [];
+            const autonShotPoints = autonPath?.shotAttempts || [];
+            const allianceColor = normalizeAllianceColor(row.payload.allianceColor || row.alliance);
+            const hasAutonPath = Boolean(autonPath);
 
             return (
               <article key={row.id} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4 space-y-3">
@@ -415,17 +601,48 @@ export function AdminGlobalMatchData() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                       <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Teleop Shot Data</p>
-                        <pre className="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-all overflow-x-auto max-h-72">
-                          {stringifyJson(row.payload.teleopShotAttempts || [])}
-                        </pre>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Unaveraged Autonomous Path</p>
+                        <div className="mt-2">
+                          {autonPath ? (
+                            <AutonPathField
+                              instanceId={`global-replay-${row.id}`}
+                              mode="replay"
+                              allianceColor={allianceColor}
+                              value={autonPath}
+                            />
+                          ) : (
+                            <p className="text-xs text-slate-500">No autonomous path captured for this match.</p>
+                          )}
+                        </div>
                       </div>
                       <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Auton Path Data</p>
-                        <pre className="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-all overflow-x-auto max-h-72">
-                          {stringifyJson(row.payload.autonPath || null)}
-                        </pre>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Raw Teleop Shot Positions</p>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-slate-100">Teleop Shot Map</p>
+                            <p className="text-xs text-slate-400">Shots: {teleopShotCount}</p>
+                          </div>
+                          <TeleopShotField points={teleopShotPoints} />
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+                      <RawPointTable
+                        title="Auton Trajectory Points"
+                        points={autonTrajectoryPoints}
+                        emptyMessage="No trajectory points captured."
+                      />
+                      <RawPointTable
+                        title="Auton Shot Positions"
+                        points={autonShotPoints}
+                        emptyMessage="No autonomous shots captured."
+                      />
+                      <RawPointTable
+                        title="Teleop Shot Coordinates"
+                        points={teleopShotPoints}
+                        emptyMessage="No teleop shots captured."
+                      />
                     </div>
 
                     <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
