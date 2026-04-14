@@ -243,6 +243,23 @@ alter table public.admin_user_state enable row level security;
 alter table public.scout_assignments enable row level security;
 alter table public.prescouting_team_claims enable row level security;
 
+-- Remove any previously-created admin_user_profiles policies (including legacy recursive ones)
+-- so policy state is deterministic across environments before recreating known-safe policies.
+do $$
+declare
+  existing_policy record;
+begin
+  for existing_policy in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'admin_user_profiles'
+  loop
+    execute format('drop policy if exists %I on public.admin_user_profiles', existing_policy.policyname);
+  end loop;
+end;
+$$;
+
 -- Service-role requests bypass RLS in Supabase, but explicit policies are included
 -- so this schema remains predictable when roles are customized.
 drop policy if exists "service_role_full_pit_scouts" on public.pit_scouts;

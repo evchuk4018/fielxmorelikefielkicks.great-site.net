@@ -589,6 +589,9 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
     });
   }, [rows, query]);
 
+  const validatedCount = useMemo(() => rows.filter((row) => row.validated).length, [rows]);
+  const pendingValidationCount = rows.length - validatedCount;
+
   const collectorOptions = useMemo(() => {
     const collectorMap = new Map<string, { id: string; name: string; count: number }>();
 
@@ -781,31 +784,59 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
     setIsBulkDeleting(true);
 
     const deletedIds = new Set<string>();
+    const targetSignatures = new Set<string>(targetRows.map((row) => getRowSubmissionSignature(row)));
     let failedCount = 0;
+    let removedLocalCount = 0;
 
-    for (const row of targetRows) {
-      try {
-        await deleteMatchScoutById(row.id);
-        storage.removeMatchScoutRecordById(row.id);
-        deletedIds.add(row.id);
-      } catch (error) {
-        failedCount += 1;
-        console.error('Failed to bulk delete collector row:', error);
+    try {
+      for (const row of targetRows) {
+        try {
+          await deleteMatchScoutById(row.id);
+          deletedIds.add(row.id);
+        } catch (error) {
+          failedCount += 1;
+          console.error('Failed to bulk delete collector row:', error);
+        }
       }
-    }
 
-    if (deletedIds.size > 0) {
+      const localKeys = storage.getKeysByPrefix('matchScout:');
+      localKeys.forEach((key) => {
+        const localRecord = storage.get<SyncRecord<any>>(key);
+        if (!localRecord?.data || typeof localRecord.data !== 'object') {
+          return;
+        }
+
+        const payload = asMatchPayload(localRecord.data);
+        const localCollectorId = sanitizeCollectorId(payload.scoutedByProfileId) || sanitizeCollectorId(payload.scoutedByAdminProfileId);
+        const localSignature = getPayloadSubmissionSignature(payload);
+
+        if (
+          localCollectorId === collectorId
+          || targetSignatures.has(localSignature)
+          || deletedIds.has(localRecord.id)
+        ) {
+          storage.removeMatchScoutRecordByKey(key);
+          removedLocalCount += 1;
+        }
+      });
+
+      deletedIds.forEach((id) => {
+        storage.removeMatchScoutRecordById(id);
+      });
+
       loadRowsRequestRef.current += 1;
-      setRows((current) => current.filter((row) => !deletedIds.has(row.id)));
-    }
+      await loadRows(true);
 
-    if (failedCount === 0) {
-      showToast(`Deleted ${deletedIds.size} rows for ${collectorName}`);
-    } else {
-      showToast(`Deleted ${deletedIds.size} rows for ${collectorName}. ${failedCount} failed.`);
+      if (failedCount === 0) {
+        showToast(`Deleted ${deletedIds.size} remote rows and ${removedLocalCount} local rows for ${collectorName}`);
+      } else {
+        showToast(
+          `Deleted ${deletedIds.size} remote rows and ${removedLocalCount} local rows for ${collectorName}. ${failedCount} remote deletes failed.`,
+        );
+      }
+    } finally {
+      setIsBulkDeleting(false);
     }
-
-    setIsBulkDeleting(false);
   };
 
   return (
@@ -838,11 +869,11 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-3">
             <p className="text-xs uppercase tracking-wide text-slate-400">Validated</p>
-            <p className="text-lg font-bold text-emerald-300 mt-1">0</p>
+            <p className="text-lg font-bold text-emerald-300 mt-1">{validatedCount}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-3">
             <p className="text-xs uppercase tracking-wide text-slate-400">Not Validated</p>
-            <p className="text-lg font-bold text-amber-300 mt-1">{rows.length}</p>
+            <p className="text-lg font-bold text-amber-300 mt-1">{pendingValidationCount}</p>
           </div>
           <div className="rounded-2xl border border-slate-700 bg-slate-900/50 p-3">
             <p className="text-xs uppercase tracking-wide text-slate-400">Visible Rows</p>
