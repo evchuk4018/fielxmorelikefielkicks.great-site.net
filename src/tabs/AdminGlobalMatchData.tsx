@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, RefreshCw, Trash2 } from 'lucide-react';
 import { AutonPathField } from '../components/AutonPathField';
 import { showToast } from '../components/Toast';
@@ -296,6 +296,28 @@ function collectorDisplayLabel(row: Pick<GlobalMatchRow, 'collectorName' | 'coll
   return 'Unknown scout';
 }
 
+function normalizeEventKey(value: unknown): string {
+  const normalized = trimText(value).toLowerCase();
+  if (!normalized || normalized === 'unknown') {
+    return '';
+  }
+
+  return normalized;
+}
+
+function normalizeMatchKey(value: unknown): string {
+  return trimText(value).toLowerCase();
+}
+
+function extractEventKeyFromMatchKey(matchKey: string): string {
+  const separatorIndex = matchKey.indexOf('_');
+  if (separatorIndex <= 0) {
+    return '';
+  }
+
+  return matchKey.slice(0, separatorIndex);
+}
+
 function toDisplayNumber(value: unknown): number | string {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -309,6 +331,49 @@ function toDisplayNumber(value: unknown): number | string {
   }
 
   return 'Unknown';
+}
+
+function buildSubmissionSignature(params: {
+  eventKey?: unknown;
+  matchKey?: unknown;
+  matchNumber?: unknown;
+  teamNumber?: unknown;
+  collectorProfileId?: string | null;
+}): string {
+  const collector = sanitizeCollectorId(params.collectorProfileId).toLowerCase() || 'unknown';
+  const teamNumber = String(toDisplayNumber(params.teamNumber)).trim().toLowerCase();
+  const matchKey = normalizeMatchKey(params.matchKey);
+
+  if (matchKey) {
+    return `match-key:${matchKey}|team:${teamNumber}|collector:${collector}`;
+  }
+
+  const normalizedEventKey = normalizeEventKey(params.eventKey) || extractEventKeyFromMatchKey(matchKey) || 'unknown';
+  const matchNumber = String(toDisplayNumber(params.matchNumber)).trim().toLowerCase();
+
+  return `event:${normalizedEventKey}|match:${matchNumber}|team:${teamNumber}|collector:${collector}`;
+}
+
+function getPayloadSubmissionSignature(payload: Partial<MatchScoutData>): string {
+  const collectorProfileId = sanitizeCollectorId(payload.scoutedByProfileId) || sanitizeCollectorId(payload.scoutedByAdminProfileId);
+
+  return buildSubmissionSignature({
+    eventKey: payload.eventKey,
+    matchKey: payload.matchKey,
+    matchNumber: payload.matchNumber,
+    teamNumber: payload.teamNumber,
+    collectorProfileId,
+  });
+}
+
+function getRowSubmissionSignature(row: Pick<GlobalMatchRow, 'eventKey' | 'matchNumber' | 'teamNumber' | 'collectorProfileId' | 'payload'>): string {
+  return buildSubmissionSignature({
+    eventKey: row.eventKey,
+    matchKey: row.payload.matchKey,
+    matchNumber: row.matchNumber,
+    teamNumber: row.teamNumber,
+    collectorProfileId: row.collectorProfileId,
+  });
 }
 
 function toUpdatedAt(value: string | null | undefined): number {
@@ -360,22 +425,28 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, boolean>>({});
   const [pendingApprovals, setPendingApprovals] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const loadRowsRequestRef = useRef(0);
+
+  const normalizedScoutProfiles = useMemo(() => {
+    return scoutProfiles
+      .map((profile) => ({ id: profile.id.trim(), name: profile.name.trim() }))
+      .filter((profile) => Boolean(profile.id) && Boolean(profile.name))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [scoutProfiles]);
+
+  const scoutProfilesSignature = useMemo(() => {
+    return normalizedScoutProfiles.map((profile) => `${profile.id}:${profile.name}`).join('|');
+  }, [normalizedScoutProfiles]);
 
   const scoutNameById = useMemo(() => {
     const map = new Map<string, string>();
 
-    scoutProfiles.forEach((profile) => {
-      const id = profile.id.trim();
-      const name = profile.name.trim();
-      if (!id || !name) {
-        return;
-      }
-
-      map.set(id, name);
+    normalizedScoutProfiles.forEach((profile) => {
+      map.set(profile.id, profile.name);
     });
 
     return map;
-  }, [scoutProfiles]);
+  }, [scoutProfilesSignature]);
 
   const loadRows = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) {
@@ -383,6 +454,8 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
     } else {
       setIsLoading(true);
     }
+
+    const requestId = ++loadRowsRequestRef.current;
 
     try {
       const localRows = storage
@@ -460,11 +533,24 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       });
 
       const sorted = Array.from(merged.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+
+      if (requestId !== loadRowsRequestRef.current) {
+        return;
+      }
+
       setRows(sorted);
     } catch (error) {
+      if (requestId !== loadRowsRequestRef.current) {
+        return;
+      }
+
       console.error('Failed to load global match data:', error);
       showToast('Failed to load global match data');
     } finally {
+      if (requestId !== loadRowsRequestRef.current) {
+        return;
+      }
+
       if (isManualRefresh) {
         setIsRefreshing(false);
       } else {
@@ -566,6 +652,8 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       return;
     }
 
+    const targetSignature = getRowSubmissionSignature(row);
+
     const confirmed = window.confirm(
       `Delete match ${row.matchNumber} / team ${row.teamNumber} from the global data pool? This cannot be undone.`,
     );
@@ -578,8 +666,33 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
 
     try {
       await deleteMatchScoutById(row.id);
+
+      const localKeys = storage.getKeysByPrefix('matchScout:');
+      localKeys.forEach((key) => {
+        const record = storage.get<SyncRecord<any>>(key);
+        if (!record?.data || typeof record.data !== 'object') {
+          return;
+        }
+
+        const payload = asMatchPayload(record.data);
+        if (getPayloadSubmissionSignature(payload) !== targetSignature) {
+          return;
+        }
+
+        storage.removeMatchScoutRecordByKey(key);
+      });
+
       storage.removeMatchScoutRecordById(row.id);
-      setRows((current) => current.filter((entry) => entry.id !== row.id));
+      loadRowsRequestRef.current += 1;
+      setRows((current) => {
+        return current.filter((entry) => {
+          if (entry.id === row.id) {
+            return false;
+          }
+
+          return getRowSubmissionSignature(entry) !== targetSignature;
+        });
+      });
       showToast(`Deleted match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
       console.error('Failed to delete global match row:', error);
@@ -598,21 +711,40 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       return;
     }
 
+    const targetSignature = getRowSubmissionSignature(row);
+
     setPendingApprovals((current) => ({ ...current, [row.id]: true }));
 
     try {
-      if (row.localKey) {
-        const localRecord = storage.get<SyncRecord<any>>(row.localKey);
-        if (localRecord?.data && typeof localRecord.data === 'object') {
-          storage.saveRecord('matchScout', row.localKey, {
-            ...(localRecord.data as Record<string, unknown>),
-            validated: true,
-          });
+      const localKeys = storage.getKeysByPrefix('matchScout:');
+      localKeys.forEach((key) => {
+        const localRecord = storage.get<SyncRecord<any>>(key);
+        if (!localRecord?.data || typeof localRecord.data !== 'object') {
+          return;
         }
-      }
+
+        const payload = asMatchPayload(localRecord.data);
+        if (getPayloadSubmissionSignature(payload) !== targetSignature) {
+          return;
+        }
+
+        storage.saveRecord('matchScout', key, {
+          ...(localRecord.data as Record<string, unknown>),
+          validated: true,
+        });
+      });
 
       await validateMatchScoutById(row.id);
-      setRows((current) => current.filter((entry) => entry.id !== row.id));
+      loadRowsRequestRef.current += 1;
+      setRows((current) => {
+        return current.filter((entry) => {
+          if (entry.id === row.id) {
+            return false;
+          }
+
+          return getRowSubmissionSignature(entry) !== targetSignature;
+        });
+      });
       showToast(`Approved match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
       console.error('Failed to approve global match row:', error);
@@ -663,6 +795,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
     }
 
     if (deletedIds.size > 0) {
+      loadRowsRequestRef.current += 1;
       setRows((current) => current.filter((row) => !deletedIds.has(row.id)));
     }
 
