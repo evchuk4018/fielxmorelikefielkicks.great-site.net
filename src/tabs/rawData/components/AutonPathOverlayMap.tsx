@@ -55,18 +55,18 @@ function toPolyline(points: NormalizedPoint[], width: number, height: number): s
 
 function resolveLineOpacity(runCount: number): number {
   if (runCount <= 8) {
-    return 0.34;
-  }
-
-  if (runCount <= 20) {
     return 0.24;
   }
 
-  if (runCount <= 45) {
+  if (runCount <= 20) {
     return 0.16;
   }
 
-  return 0.1;
+  if (runCount <= 45) {
+    return 0.11;
+  }
+
+  return 0.07;
 }
 
 function resolveStrokeWidth(runCount: number): number {
