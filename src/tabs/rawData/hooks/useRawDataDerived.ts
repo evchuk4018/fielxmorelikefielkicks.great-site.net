@@ -1,7 +1,6 @@
 import { useDeferredValue, useMemo, useRef } from 'react';
 import {
   METRIC_META,
-  PATH_SAMPLE_COUNT,
   STRIP_ORDER,
 } from '../constants';
 import {
@@ -23,14 +22,10 @@ import {
   alignPointToAlliance,
   asAutonPathData,
   asMatchPayload,
-  averagePoint,
-  averageResampledPaths,
   buildMatchNotesBundle,
-  buildReplayPath,
   getPayloadEventKey,
   metricValue,
   normalizePoint,
-  resampleTrajectory,
   resolveStripForY,
 } from '../utils';
 
@@ -192,11 +187,26 @@ export function useRawDataDerived({
       bottom: [],
     };
 
-    const groupedAllianceCounts: Record<'top' | 'middle' | 'bottom', { red: number; blue: number }> = {
-      top: { red: 0, blue: 0 },
-      middle: { red: 0, blue: 0 },
-      bottom: { red: 0, blue: 0 },
-    };
+    const globalAllianceCounts = selectedTeamAutonPaths.reduce(
+      (counts, entry) => {
+        if (entry.allianceColor === 'Red') {
+          counts.red += 1;
+        }
+        if (entry.allianceColor === 'Blue') {
+          counts.blue += 1;
+        }
+        return counts;
+      },
+      { red: 0, blue: 0 },
+    );
+
+    const dominantAlliance: 'Red' | 'Blue' | '' =
+      globalAllianceCounts.red === globalAllianceCounts.blue
+        ? ''
+        : globalAllianceCounts.red > globalAllianceCounts.blue
+        ? 'Red'
+        : 'Blue';
+    const targetAlliance: 'Red' | 'Blue' | '' = dominantAlliance || (selectedTeamAutonPaths[0]?.allianceColor || '');
 
     selectedTeamAutonPaths.forEach((entry) => {
       const strip = resolveStripForY(entry.path.startPosition?.y ?? 0.5);
@@ -207,44 +217,28 @@ export function useRawDataDerived({
 
       if (normalizedTrajectory.length > 0) {
         groupedRuns[strip].push({
-          trajectory: resampleTrajectory(normalizedTrajectory, PATH_SAMPLE_COUNT),
+          key: entry.key,
+          matchNumber: entry.matchNumber,
+          trajectory: normalizedTrajectory,
           shots: entry.path.shotAttempts
             .map((shot) => normalizePoint({ x: shot.x, y: shot.y }))
             .filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y)),
-          start: normalizePoint({ x: entry.path.startPosition.x, y: entry.path.startPosition.y }),
           alliance: entry.allianceColor,
         });
-      }
-
-      if (entry.allianceColor === 'Red') {
-        groupedAllianceCounts[strip].red += 1;
-      }
-      if (entry.allianceColor === 'Blue') {
-        groupedAllianceCounts[strip].blue += 1;
       }
     });
 
     const computed = STRIP_ORDER.map((stripConfig) => {
       const runs = groupedRuns[stripConfig.key];
-      const allianceCounts = groupedAllianceCounts[stripConfig.key];
-      const dominantAlliance =
-        allianceCounts.red === allianceCounts.blue ? '' : allianceCounts.red > allianceCounts.blue ? 'Red' : 'Blue';
-
-      const targetAlliance: 'Red' | 'Blue' | '' = dominantAlliance || (runs[0]?.alliance || '');
 
       const alignedRuns = runs.map((run) => {
         return {
-          start: alignPointToAlliance(run.start, run.alliance, targetAlliance),
+          key: run.key,
+          matchNumber: run.matchNumber,
           trajectory: run.trajectory.map((point) => alignPointToAlliance(point, run.alliance, targetAlliance)),
           shots: run.shots.map((shot) => alignPointToAlliance(shot, run.alliance, targetAlliance)),
         };
       });
-
-      const avgStart = averagePoint(alignedRuns.map((run) => run.start));
-      const avgPath = averageResampledPaths(alignedRuns.map((run) => run.trajectory));
-      if (avgPath.length > 0) {
-        avgPath[0] = avgStart;
-      }
 
       const allShots = alignedRuns.flatMap((run) => run.shots);
 
@@ -253,9 +247,11 @@ export function useRawDataDerived({
         label: stripConfig.label,
         runCount: runs.length,
         totalShots: allShots.length,
-        avgPath,
-        replayPath: buildReplayPath(avgPath, allShots),
-        dominantAlliance: targetAlliance,
+        pathRuns: alignedRuns.map((run) => ({
+          key: run.key,
+          matchNumber: run.matchNumber,
+          trajectory: run.trajectory,
+        })),
         shotPoints: allShots,
       };
     });

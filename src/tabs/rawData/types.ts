@@ -63,21 +63,26 @@ export type NormalizedPoint = {
   y: number;
 };
 
+export type StripPathRun = {
+  key: string;
+  matchNumber: number;
+  trajectory: NormalizedPoint[];
+};
+
 export type StripSummary = {
   key: StripKey;
   label: string;
   runCount: number;
   totalShots: number;
-  avgPath: NormalizedPoint[];
-  replayPath: AutonPathData | null;
-  dominantAlliance: 'Red' | 'Blue' | '';
+  pathRuns: StripPathRun[];
   shotPoints: NormalizedPoint[];
 };
 
 export type StripRunSample = {
+  key: string;
+  matchNumber: number;
   trajectory: NormalizedPoint[];
   shots: NormalizedPoint[];
-  start: NormalizedPoint;
   alliance: 'Red' | 'Blue' | '';
 };
 
