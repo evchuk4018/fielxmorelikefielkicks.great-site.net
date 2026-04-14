@@ -105,7 +105,7 @@ export default function App() {
     if (profile.role !== authRole) {
       return false;
     }
-    if (profile.role === 'scout' && profile.bannedAt) {
+    if (profile.bannedAt) {
       return false;
     }
     return true;

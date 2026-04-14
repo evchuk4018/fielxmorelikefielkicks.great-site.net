@@ -225,8 +225,8 @@ export async function loadUserProfile(params: {
     return;
   }
 
-  if (selectedProfile.role === 'scout' && selectedProfile.bannedAt) {
-    showToast(selectedProfile.bannedReason || 'This scout profile is banned');
+  if (selectedProfile.bannedAt) {
+    showToast(selectedProfile.bannedReason || 'This profile is banned');
     return;
   }
 
