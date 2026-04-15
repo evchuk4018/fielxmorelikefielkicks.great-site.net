@@ -1,3 +1,5 @@
+import { apiLogger } from '../../_shared/logger.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -16,7 +18,7 @@ export default async function handler(req, res) {
 
   const targetUrl = `https://api.statbotics.io/v3/team/${normalizedTeamNumber}`;
 
-  console.log('[api/statbotics/team] request', {
+  apiLogger.debug('[api/statbotics/team] request', {
     teamNumber: normalizedTeamNumber,
     targetUrl,
   });
@@ -29,7 +31,7 @@ export default async function handler(req, res) {
     const body = await response.text();
 
     if (!response.ok) {
-      console.error('[api/statbotics/team] upstream failed', {
+      apiLogger.error('[api/statbotics/team] upstream failed', {
         teamNumber: normalizedTeamNumber,
         status: response.status,
       });
@@ -43,7 +45,7 @@ export default async function handler(req, res) {
     if (error instanceof Error && error.name === 'AbortError') {
       return res.status(504).json({ error: 'Statbotics team request timed out' });
     }
-    console.error('[api/statbotics/team] exception', {
+    apiLogger.error('[api/statbotics/team] exception', {
       teamNumber: normalizedTeamNumber,
       error: error instanceof Error ? error.message : String(error),
     });

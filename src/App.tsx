@@ -22,6 +22,7 @@ import { PrescoutingQuickScoutTarget, setPendingPrescoutingQuickScout } from './
 import {
   FaceIdMode,
 } from './app/types';
+import { logger } from './lib/logger';
 
 const GLOBAL_MATCH_DATA_ADMIN_ID_SET = new Set<string>(GLOBAL_MATCH_DATA_ADMIN_IDS);
 
@@ -90,7 +91,7 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Failed to refresh admin user profiles:', error);
+      logger.error('Failed to refresh admin user profiles:', error);
       setSignedInUserProfileId(null);
     }
   }, [setSignedInUserProfileId, setUserProfiles, signedInUserProfileId]);

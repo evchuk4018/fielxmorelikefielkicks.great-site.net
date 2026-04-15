@@ -9,6 +9,7 @@ import { PRESCOUTING_SEASON_YEAR, PRESCOUTING_TEAMS, PRESCOUTING_TEAM_NUMBERS } 
 import { getMatchEventKey, loadAllTeamMatchesForPrescouting, sortMatches } from '../prescouting/matchData';
 import { PrescoutingQuickScoutTarget } from '../prescouting/quickScout';
 import { isTeamMatchAlreadyScouted, loadPrescoutingScoutedIndex, PrescoutingScoutedIndex } from '../prescouting/scoutedEntries';
+import { logger } from '../lib/logger';
 
 type MatchColumn = {
   key: string;
@@ -95,7 +96,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
       const claims = await listActivePrescoutingTeamClaims(PRESCOUTING_SEASON_YEAR);
       setClaimsByTeam(buildClaimMap(claims));
     } catch (loadError) {
-      console.error('Failed to load team claims:', loadError);
+      logger.error('Failed to load team claims:', loadError);
       showToast('Failed to load team claims.');
       setClaimsByTeam(new Map());
     } finally {

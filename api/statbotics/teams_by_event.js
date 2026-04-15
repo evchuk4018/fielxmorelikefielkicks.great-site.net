@@ -1,3 +1,5 @@
+import { apiLogger } from '../_shared/logger.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -12,7 +14,7 @@ export default async function handler(req, res) {
   const normalizedEventKey = eventKey.trim().toLowerCase();
   const targetUrl = `https://api.statbotics.io/v3/teams/${encodeURIComponent(normalizedEventKey)}`;
 
-  console.log('[api/statbotics/teams_by_event] request', {
+  apiLogger.debug('[api/statbotics/teams_by_event] request', {
     originalEventKey: eventKey,
     normalizedEventKey,
     targetUrl,
@@ -26,7 +28,7 @@ export default async function handler(req, res) {
     const body = await response.text();
 
     if (!response.ok) {
-      console.error('[api/statbotics/teams_by_event] upstream failed', {
+      apiLogger.error('[api/statbotics/teams_by_event] upstream failed', {
         normalizedEventKey,
         status: response.status,
       });
@@ -34,7 +36,7 @@ export default async function handler(req, res) {
     }
 
     const payload = JSON.parse(body);
-    console.log('[api/statbotics/teams_by_event] success', {
+    apiLogger.debug('[api/statbotics/teams_by_event] success', {
       normalizedEventKey,
       rows: Array.isArray(payload) ? payload.length : 0,
     });
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
     if (error instanceof Error && error.name === 'AbortError') {
       return res.status(504).json({ error: 'Statbotics teams_by_event request timed out' });
     }
-    console.error('[api/statbotics/teams_by_event] exception', {
+    apiLogger.error('[api/statbotics/teams_by_event] exception', {
       normalizedEventKey,
       error: error instanceof Error ? error.message : String(error),
     });

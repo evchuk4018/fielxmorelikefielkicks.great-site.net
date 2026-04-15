@@ -13,6 +13,7 @@ import {
 } from '../auth/profileStorage';
 import { CompetitionProfile } from '../../types';
 import { UserProfile } from '../types';
+import { logger } from '../../lib/logger';
 
 type UseInitialAppLoadParams = {
   setProfiles: (profiles: CompetitionProfile[]) => void;
@@ -51,7 +52,7 @@ export function useInitialAppLoad(params: UseInitialAppLoadParams) {
       try {
         await hydrateProfilesFromSupabase();
       } catch (error) {
-        console.error('Failed to hydrate profiles from Supabase:', error);
+        logger.error('Failed to hydrate profiles from Supabase:', error);
       }
 
       if (isCancelled) {
@@ -80,7 +81,7 @@ export function useInitialAppLoad(params: UseInitialAppLoadParams) {
           await clearStoredActiveUserProfileId();
         }
       } catch (error) {
-        console.error('Failed to load admin user profiles:', error);
+        logger.error('Failed to load admin user profiles:', error);
         setUserProfiles([]);
         setSignedInUserProfileId(null);
       }

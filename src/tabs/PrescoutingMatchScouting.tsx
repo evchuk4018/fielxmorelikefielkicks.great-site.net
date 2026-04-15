@@ -15,6 +15,7 @@ import {
 } from '../prescouting/quickScout';
 import { isTeamMatchAlreadyScouted, loadPrescoutingScoutedIndex, PrescoutingScoutedIndex } from '../prescouting/scoutedEntries';
 import { showToast } from '../components/Toast';
+import { logger } from '../lib/logger';
 
 type Props = {
   isAdminScout: boolean;
@@ -115,7 +116,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
       const claims = await listActivePrescoutingTeamClaims(PRESCOUTING_SEASON_YEAR);
       setClaimsByTeam(buildClaimMap(claims));
     } catch (error) {
-      console.error('Failed to load prescouting claims:', error);
+      logger.error('Failed to load prescouting claims:', error);
     } finally {
       setIsLoadingClaims(false);
     }
@@ -233,7 +234,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
           setScoutedIndex(next);
         }
       } catch (error) {
-        console.error('Failed to load scouted index:', error);
+        logger.error('Failed to load scouted index:', error);
       }
     };
 

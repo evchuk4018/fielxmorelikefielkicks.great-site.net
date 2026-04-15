@@ -6,6 +6,7 @@ import { listAssignmentsForScout, markAssignmentCompleted } from '../lib/supabas
 import { AutonPathData, AutonShotAttempt, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
 import { MatchScoutingFormState, MatchScoutingSections } from '../components/MatchScoutingSections';
 import { showToast } from '../components/Toast';
+import { logger } from '../lib/logger';
 
 type AllianceColor = 'Red' | 'Blue';
 
@@ -93,7 +94,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
           setSelectedMatchKey(firstQual.key);
         }
       } catch (err) {
-        console.error('Failed to load matches:', err);
+        logger.error('Failed to load matches:', err);
         if (!cancelled) {
           setError('Failed to load matches for this event.');
         }
@@ -122,7 +123,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
           setAssignments(loadedAssignments);
         }
       } catch (error) {
-        console.error('Failed to load scout assignments:', error);
+        logger.error('Failed to load scout assignments:', error);
       }
     };
 

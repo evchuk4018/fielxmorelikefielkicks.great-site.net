@@ -1,5 +1,6 @@
 import { PASSWORD_HASH_ITERATIONS } from '../constants';
 import { UserProfile } from '../types';
+import { logger } from '../../lib/logger';
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -9,7 +10,7 @@ function bytesToHex(bytes: Uint8Array): string {
 
 function hexToBytes(hex: string): Uint8Array {
   if (!hex || hex.length % 2 !== 0) {
-    console.warn('Invalid hex input while decoding bytes');
+    logger.warn('Invalid hex input while decoding bytes');
     return new Uint8Array();
   }
 
@@ -17,7 +18,7 @@ function hexToBytes(hex: string): Uint8Array {
   for (let index = 0; index < hex.length; index += 2) {
     const value = Number.parseInt(hex.slice(index, index + 2), 16);
     if (!Number.isFinite(value)) {
-      console.warn('Invalid hex pair while decoding bytes');
+      logger.warn('Invalid hex pair while decoding bytes');
       return new Uint8Array();
     }
     bytes[index / 2] = value;
@@ -70,7 +71,7 @@ export async function verifyPassword(profile: UserProfile, candidatePassword: st
   const saltBytes = hexToBytes(profile.passwordSalt);
   const normalizedSaltBytes = Uint8Array.from(saltBytes);
   if (normalizedSaltBytes.length === 0) {
-    console.warn('Invalid password salt for profile', profile.id);
+    logger.warn('Invalid password salt for profile', profile.id);
     return false;
   }
 

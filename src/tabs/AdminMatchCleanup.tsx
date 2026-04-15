@@ -13,6 +13,7 @@ import {
   validateMatchScoutById,
 } from '../lib/supabase';
 import { MatchScoutData, ScoutAssignment, SyncRecord, TBAMatch } from '../types';
+import { logger } from '../lib/logger';
 
 type MatchScoutRow = {
   id: string;
@@ -119,8 +120,8 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       const localRows = storage
         .getAllKeys()
         .filter((key) => key.startsWith('matchScout:'))
-        .map((key) => ({ key, record: storage.get<SyncRecord<any>>(key) }))
-        .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
+        .map((key) => ({ key, record: storage.get<SyncRecord<unknown>>(key) }))
+        .filter((entry): entry is { key: string; record: SyncRecord<unknown> } => Boolean(entry.record?.id))
         .map(({ key, record }) => {
           const payload = asMatchPayload(record.data);
           const rowEventKey = trimText(payload.eventKey).toLowerCase();
@@ -192,7 +193,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       const sorted = Array.from(merged.values()).sort((a, b) => b.updatedAt - a.updatedAt);
       setRows(sorted);
     } catch (error) {
-      console.error('Failed to load match scout rows:', error);
+      logger.error('Failed to load match scout rows:', error);
       showToast('Failed to load match scouting data');
     } finally {
       setIsLoading(false);
@@ -210,7 +211,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
         }
       }
     } catch (error) {
-      console.error('Failed to load scout assignments:', error);
+      logger.error('Failed to load scout assignments:', error);
       showToast('Failed to load assignments');
     }
   }, [eventKey, assignmentScoutId, scoutProfiles]);
@@ -226,7 +227,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       const fetched = await tba.fetchMatches(normalizedEventKey);
       setEventMatches(Array.isArray(fetched) ? fetched : []);
     } catch (error) {
-      console.error('Failed to load event matches for assignment board:', error);
+      logger.error('Failed to load event matches for assignment board:', error);
       setEventMatches(tba.getMatches());
     }
   }, [eventKey]);
@@ -334,8 +335,8 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       const localRows = storage
         .getAllKeys()
         .filter((key) => key.startsWith('matchScout:'))
-        .map((key) => ({ key, record: storage.get<SyncRecord<any>>(key) }))
-        .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
+        .map((key) => ({ key, record: storage.get<SyncRecord<unknown>>(key) }))
+        .filter((entry): entry is { key: string; record: SyncRecord<unknown> } => Boolean(entry.record?.id))
         .map(({ key, record }) => {
           const payload = asMatchPayload(record.data);
           const rowEventKey = trimText(payload.eventKey).toLowerCase();
@@ -499,7 +500,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
 
       showToast(`Exported ${exportRows.length} rows to CSV`);
     } catch (error) {
-      console.error('Failed to export admin CSV:', error);
+      logger.error('Failed to export admin CSV:', error);
       showToast('Export failed. Try again.');
     } finally {
       setIsExporting(false);
@@ -518,7 +519,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       setRows((current) => current.filter((entry) => entry.id !== row.id));
       showToast(`Deleted match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
-      console.error('Failed to delete match scout row:', error);
+      logger.error('Failed to delete match scout row:', error);
       showToast('Delete failed. Try again.');
     } finally {
       setPendingActions((current) => {
@@ -537,7 +538,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
     setPendingActions((current) => ({ ...current, [row.id]: 'validate' }));
     try {
       if (row.localKey) {
-        const localRecord = storage.get<SyncRecord<any>>(row.localKey);
+        const localRecord = storage.get<SyncRecord<unknown>>(row.localKey);
         if (localRecord?.data && typeof localRecord.data === 'object') {
           storage.saveRecord('matchScout', row.localKey, {
             ...(localRecord.data as Record<string, unknown>),
@@ -550,7 +551,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       setRows((current) => current.filter((entry) => entry.id !== row.id));
       showToast(`Validated match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
-      console.error('Failed to validate match scout row:', error);
+      logger.error('Failed to validate match scout row:', error);
       showToast('Validation failed. Try again.');
     } finally {
       setPendingActions((current) => {
@@ -592,7 +593,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       setAssignmentNotes('');
       showToast('Assignment saved');
     } catch (error) {
-      console.error('Failed to save assignment:', error);
+      logger.error('Failed to save assignment:', error);
       showToast('Assignment save failed');
     } finally {
       setIsAssignmentBusy(false);
@@ -610,7 +611,7 @@ export function AdminMatchCleanup({ eventKey, scoutProfiles, onBanScout, onUnban
       setAssignments((current) => current.filter((assignment) => assignment.id !== assignmentId));
       showToast('Assignment deleted');
     } catch (error) {
-      console.error('Failed to delete assignment:', error);
+      logger.error('Failed to delete assignment:', error);
       showToast('Failed to delete assignment');
     } finally {
       setAssignmentPendingActions((current) => {

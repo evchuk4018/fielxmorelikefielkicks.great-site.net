@@ -2,6 +2,7 @@ import { storage } from './storage';
 import { SyncRecord } from '../types';
 import { supabase } from './supabase';
 import { getActiveProfile } from './competitionProfiles';
+import { logger } from './logger';
 
 export type SyncStatus = 'success' | 'pending' | 'error';
 
@@ -37,6 +38,14 @@ function toNullableNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function asRecordPayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
 }
 
 export const syncManager = {
@@ -97,7 +106,7 @@ export const syncManager = {
       }
 
       (pitResult.data || []).forEach((row: SupabaseScoutRow) => {
-        const payload = normalizeJsonPayload(row.data) as any;
+        const payload = asRecordPayload(normalizeJsonPayload(row.data));
         const teamNumber = toNullableNumber(payload?.teamNumber);
         const eventKey = (row.event_key || payload?.eventKey || '').toString().trim().toLowerCase();
         const profileId = (row.profile_id || payload?.profileId || activeProfile?.id || '').toString().trim();
@@ -106,7 +115,7 @@ export const syncManager = {
           return;
         }
 
-        const record = {
+        const record: SyncRecord<Record<string, unknown>> = {
           id: row.id,
           type: 'pitScout',
           timestamp: new Date(row.updated_at).getTime(),
@@ -116,18 +125,18 @@ export const syncManager = {
             eventKey,
             profileId,
           },
-        } as SyncRecord<any>;
+        };
 
-        const key = `pitScout:${record.data.profileId}:${record.data.teamNumber}`;
-        const localRecord = storage.get<SyncRecord<any>>(key);
+        const key = `pitScout:${profileId}:${teamNumber}`;
+        const localRecord = storage.get<SyncRecord<Record<string, unknown>>>(key);
         if (!localRecord || record.timestamp > localRecord.timestamp) {
           storage.set(key, record);
         }
       });
 
       (matchResult.data || []).forEach((row: SupabaseScoutRow) => {
-        const payload = normalizeJsonPayload(row.data) as any;
-        const record = {
+        const payload = asRecordPayload(normalizeJsonPayload(row.data));
+        const record: SyncRecord<Record<string, unknown>> = {
           id: row.id,
           type: 'matchScout',
           timestamp: new Date(row.updated_at).getTime(),
@@ -135,7 +144,7 @@ export const syncManager = {
             ...payload,
             validated: Boolean(row.validated ?? payload?.validated),
           },
-        } as SyncRecord<any>;
+        };
 
         const matchNumber = toNullableNumber(record.data.matchNumber);
         const teamNumber = toNullableNumber(record.data.teamNumber);
@@ -145,7 +154,7 @@ export const syncManager = {
 
         const key = `matchScout:${matchNumber}:${teamNumber}`;
 
-        const localRecord = storage.get<SyncRecord<any>>(key);
+        const localRecord = storage.get<SyncRecord<Record<string, unknown>>>(key);
         if (!localRecord || record.timestamp > localRecord.timestamp) {
           storage.set(key, record);
         }
@@ -154,7 +163,7 @@ export const syncManager = {
       lastSyncTime = Date.now();
       currentStatus = storage.getSyncQueue().length > 0 ? 'pending' : 'success';
     } catch (error) {
-      console.error('Initial sync failed:', error);
+      logger.error('Initial sync failed:', error);
       currentStatus = 'error';
     }
     this.notify();
@@ -174,7 +183,7 @@ export const syncManager = {
             return false;
           }
 
-          const payload = (record.data || {}) as any;
+          const payload = asRecordPayload(record.data);
           const eventKey = typeof payload.eventKey === 'string' ? payload.eventKey.trim() : '';
           const profileId = typeof payload.profileId === 'string' ? payload.profileId.trim() : '';
           const teamNumber = toNullableNumber(payload.teamNumber);
@@ -190,7 +199,7 @@ export const syncManager = {
       const matchKeys = storage.getAllKeys().filter((key) => key.startsWith('matchScout:'));
       const localMatchIds = new Set(
         matchKeys
-          .map((key) => storage.get<SyncRecord<any>>(key)?.id)
+          .map((key) => storage.get<SyncRecord<unknown>>(key)?.id)
           .filter((id): id is string => typeof id === 'string' && id.length > 0)
       );
 
@@ -208,7 +217,7 @@ export const syncManager = {
       const pitRows = activeQueue
         .filter(record => record.type === 'pitScout')
         .map(record => {
-          const payload = (record.data || {}) as any;
+          const payload = asRecordPayload(record.data);
           const eventKey = typeof payload.eventKey === 'string' ? payload.eventKey.trim().toLowerCase() : '';
           const profileId = typeof payload.profileId === 'string' ? payload.profileId.trim() : '';
           const teamNumber = toNullableNumber(payload.teamNumber);
@@ -231,21 +240,25 @@ export const syncManager = {
           event_key: string;
           profile_id: string;
           team_number: number;
-          data: unknown;
+          data: Record<string, unknown>;
           updated_at: string;
         } => row !== null);
 
       const matchRows = activeQueue
         .filter(record => record.type === 'matchScout')
-        .map(record => ({
-          id: record.id,
-          match_number: toNullableNumber((record.data as any)?.matchNumber),
-          team_number: toNullableNumber((record.data as any)?.teamNumber),
-          alliance: (record.data as any)?.allianceColor || null,
-          validated: Boolean((record.data as any)?.validated),
-          data: record.data,
-          updated_at: new Date(record.timestamp).toISOString(),
-        }))
+        .map(record => {
+          const payload = asRecordPayload(record.data);
+
+          return {
+            id: record.id,
+            match_number: toNullableNumber(payload.matchNumber),
+            team_number: toNullableNumber(payload.teamNumber),
+            alliance: typeof payload.allianceColor === 'string' ? payload.allianceColor : null,
+            validated: Boolean(payload.validated),
+            data: record.data,
+            updated_at: new Date(record.timestamp).toISOString(),
+          };
+        })
         .filter((row) => row.match_number !== null && row.team_number !== null);
 
       const [pitResult, matchResult] = await Promise.all([
@@ -262,7 +275,7 @@ export const syncManager = {
         window.dispatchEvent(new CustomEvent('sync-success'));
       }
     } catch (error) {
-      console.error('Sync failed:', error);
+      logger.error('Sync failed:', error);
       currentStatus = 'error';
     }
     

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { storage } from '../lib/storage';
-import { PitScoutData, ClimbLevel, DriveTrainType, DriveMotor, IntakePosition, ShooterType, CompetitionProfile, TBATeam } from '../types';
+import { PitScoutData, ClimbLevel, DriveTrainType, DriveMotor, IntakePosition, ShooterType, CompetitionProfile, SyncRecord, TBATeam } from '../types';
 import { getProfileTeams } from '../lib/competitionProfiles';
 import { Stepper } from '../components/Stepper';
 import { Toggle, MultiToggle } from '../components/Toggle';
@@ -110,7 +110,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     const scopedKey = getScopedPitKey(activeProfile.id, data.teamNumber);
-    const saved = storage.get<any>(scopedKey);
+    const saved = storage.get<SyncRecord<PitScoutData>>(scopedKey);
     if (saved && saved.data) {
       setHasExistingRecord(true);
       setData({
@@ -177,7 +177,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     const scopedKey = getScopedPitKey(activeProfile.id, team.team_number);
-    const saved = storage.get<any>(scopedKey);
+    const saved = storage.get<SyncRecord<PitScoutData>>(scopedKey);
     setHasExistingRecord(Boolean(saved?.data));
     setData({
       ...INITIAL_STATE,

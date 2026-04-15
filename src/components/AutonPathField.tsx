@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AllianceColor, AutonPathData, AutonShotAttempt, AutonTrajectoryPoint } from '../types';
+import { logger } from '../lib/logger';
 
 type Point = { x: number; y: number };
 type RecorderPhase = 'setup' | 'recording' | 'annotate' | 'teleop';
@@ -204,7 +205,7 @@ export function AutonPathField({
       setPhase('annotate');
       setElapsedMs(value.durationMs);
       setRobotSetupPoint({ x: value.trajectoryPoints[0].x, y: value.trajectoryPoints[0].y });
-      console.info('[AutonPathField] Context hydration loaded existing path', {
+      logger.info('[AutonPathField] Context hydration loaded existing path', {
         instanceId,
         allianceColor,
         points: value.trajectoryPoints.length,
@@ -216,7 +217,7 @@ export function AutonPathField({
     setPhase('setup');
     setElapsedMs(0);
     setRobotSetupPoint(value?.startPosition ? clampPointToAllianceZone(value.startPosition, allianceColor) : defaultStartPoint(allianceColor));
-    console.info('[AutonPathField] Context reset to setup', {
+    logger.info('[AutonPathField] Context reset to setup', {
       instanceId,
       allianceColor,
       hadStartPosition: Boolean(value?.startPosition),
@@ -255,7 +256,7 @@ export function AutonPathField({
     const timer = window.setInterval(() => {
       if (teleopStartEpochRef.current === null) {
         teleopStartEpochRef.current = performance.now();
-        console.warn('[AutonPathField] Teleop phase entered without start epoch. Reinitializing timer.', {
+        logger.warn('[AutonPathField] Teleop phase entered without start epoch. Reinitializing timer.', {
           instanceId,
         });
       }
@@ -267,7 +268,7 @@ export function AutonPathField({
       const wholeSecond = Math.floor(bounded / 1000);
       if (wholeSecond !== lastTeleopLoggedSecondRef.current) {
         lastTeleopLoggedSecondRef.current = wholeSecond;
-        console.info('[AutonPathField] Teleop timer tick', {
+        logger.info('[AutonPathField] Teleop timer tick', {
           instanceId,
           elapsedMs: bounded,
           remainingMs: Math.max(0, TELEOP_DURATION_MS - bounded),
@@ -276,7 +277,7 @@ export function AutonPathField({
 
       if (bounded >= TELEOP_DURATION_MS && !teleopCompletionLoggedRef.current) {
         teleopCompletionLoggedRef.current = true;
-        console.info('[AutonPathField] Teleop timer complete', {
+        logger.info('[AutonPathField] Teleop timer complete', {
           instanceId,
           teleopDurationMs: TELEOP_DURATION_MS,
           teleopShots: (teleopShotAttempts || []).length,
@@ -307,7 +308,7 @@ export function AutonPathField({
       const wholeSecond = Math.floor(bounded / 1000);
       if (wholeSecond !== lastAutonLoggedSecondRef.current) {
         lastAutonLoggedSecondRef.current = wholeSecond;
-        console.info('[AutonPathField] Auton timer tick', {
+        logger.info('[AutonPathField] Auton timer tick', {
           instanceId,
           elapsedMs: bounded,
           durationMs,
@@ -327,7 +328,7 @@ export function AutonPathField({
         setTeleopElapsedMs(0);
         lastTeleopLoggedSecondRef.current = -1;
         teleopCompletionLoggedRef.current = false;
-        console.info('[AutonPathField] Auton timer complete', {
+        logger.info('[AutonPathField] Auton timer complete', {
           instanceId,
           durationMs,
           nextPhase: enableTeleopShotMap ? 'teleop' : 'annotate',
@@ -446,7 +447,7 @@ export function AutonPathField({
 
     startEpochRef.current = performance.now();
     lastSampleAtRef.current = 0;
-    console.info('[AutonPathField] Recording started', {
+    logger.info('[AutonPathField] Recording started', {
       instanceId,
       allianceColor,
       durationMs,
@@ -489,7 +490,7 @@ export function AutonPathField({
     }
 
     if (teleopElapsedMs >= TELEOP_DURATION_MS) {
-      console.info('[AutonPathField] Teleop shot ignored after timer expiry', {
+      logger.info('[AutonPathField] Teleop shot ignored after timer expiry', {
         instanceId,
         teleopElapsedMs,
         teleopDurationMs: TELEOP_DURATION_MS,
@@ -510,7 +511,7 @@ export function AutonPathField({
       },
     ]);
 
-    console.info('[AutonPathField] Teleop shot marked', {
+    logger.info('[AutonPathField] Teleop shot marked', {
       instanceId,
       timestampMs,
       x: point.x,
@@ -697,7 +698,7 @@ export function AutonPathField({
   const currentTimerMs = phase === 'recording' ? elapsedMs : phase === 'teleop' ? teleopRemainingMs : playbackMs;
 
   useEffect(() => {
-    console.info('[AutonPathField] Phase update', {
+    logger.info('[AutonPathField] Phase update', {
       instanceId,
       phase,
       pathPoints: pathData?.trajectoryPoints.length || 0,

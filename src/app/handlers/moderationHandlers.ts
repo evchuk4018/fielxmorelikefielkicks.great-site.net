@@ -1,6 +1,7 @@
 import { showToast } from '../../components/Toast';
 import { setScoutBanState } from '../../lib/supabase';
 import { UserProfile } from '../types';
+import { logger } from '../../lib/logger';
 
 export async function banScout(params: {
   scoutProfileId: string;
@@ -25,7 +26,7 @@ export async function banScout(params: {
     await refreshUserProfiles();
     showToast('Scout banned and kicked');
   } catch (error) {
-    console.error('Failed to ban scout:', error);
+    logger.error('Failed to ban scout:', error);
     showToast('Failed to ban scout');
   }
 }
@@ -50,7 +51,7 @@ export async function unbanScout(params: {
     await refreshUserProfiles();
     showToast('Scout unbanned');
   } catch (error) {
-    console.error('Failed to unban scout:', error);
+    logger.error('Failed to unban scout:', error);
     showToast('Failed to unban scout');
   }
 }

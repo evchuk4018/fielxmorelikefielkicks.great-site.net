@@ -6,16 +6,22 @@ export function ToastProvider() {
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
 
   useEffect(() => {
-    const handleToast = (e: CustomEvent<{ message: string }>) => {
+    const handleToast = (event: Event) => {
+      const e = event as CustomEvent<{ message?: string }>;
+      const message = e.detail?.message;
+      if (!message) {
+        return;
+      }
+
       const id = Date.now();
-      setToasts((prev) => [...prev, { id, message: e.detail.message }]);
+      setToasts((prev) => [...prev, { id, message }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, 2000);
     };
 
-    window.addEventListener('toast' as any, handleToast);
-    return () => window.removeEventListener('toast' as any, handleToast);
+    window.addEventListener('toast', handleToast);
+    return () => window.removeEventListener('toast', handleToast);
   }, []);
 
   return (

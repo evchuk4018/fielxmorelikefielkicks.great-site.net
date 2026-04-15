@@ -35,6 +35,13 @@ type MatchNoteLine = {
   updatedAt: number;
 };
 
+type SupabaseScoutingRow = {
+  team_number?: number | null;
+  event_key?: string | null;
+  data: unknown;
+  updated_at?: string | null;
+};
+
 const REFRESH_INTERVAL_MS = 45000;
 
 function normalizeEventKey(value: string): string {
@@ -242,7 +249,8 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
   ]);
 
   if (!remotePitResult.error) {
-    (remotePitResult.data || []).forEach((row: any) => {
+    const pitRows = (remotePitResult.data || []) as SupabaseScoutingRow[];
+    pitRows.forEach((row) => {
       const payload = normalizePayload(row.data) as Partial<PitScoutData>;
       const teamNumber = toFiniteNumber(row.team_number ?? payload?.teamNumber);
       if (!teamNumber || !Number.isInteger(teamNumber) || teamNumber <= 0) {
@@ -263,7 +271,8 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
   }
 
   if (!remoteMatchResult.error) {
-    (remoteMatchResult.data || []).forEach((row: any) => {
+    const matchRows = (remoteMatchResult.data || []) as SupabaseScoutingRow[];
+    matchRows.forEach((row) => {
       const payload = normalizePayload(row.data) as Partial<MatchScoutData>;
       if (getPayloadEventKey(payload) !== normalizedEventKey) {
         return;

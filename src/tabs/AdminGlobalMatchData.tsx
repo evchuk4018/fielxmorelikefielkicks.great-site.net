@@ -6,6 +6,7 @@ import { storage } from '../lib/storage';
 import { deleteMatchScoutById, supabase, validateMatchScoutById } from '../lib/supabase';
 import { AllianceColor, AutonPathData, MatchScoutData, SyncRecord } from '../types';
 import { TeleopShotField } from './rawData/components/TeleopShotField';
+import { logger } from '../lib/logger';
 
 type GlobalMatchRow = {
   id: string;
@@ -461,8 +462,8 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       const localRows = storage
         .getAllKeys()
         .filter((key) => key.startsWith('matchScout:'))
-        .map((key) => ({ key, record: storage.get<SyncRecord<any>>(key) }))
-        .filter((entry): entry is { key: string; record: SyncRecord<any> } => Boolean(entry.record?.id))
+        .map((key) => ({ key, record: storage.get<SyncRecord<unknown>>(key) }))
+        .filter((entry): entry is { key: string; record: SyncRecord<unknown> } => Boolean(entry.record?.id))
         .map(({ key, record }) => {
           const payload = asMatchPayload(record.data);
           if (Boolean(payload.validated)) {
@@ -544,7 +545,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
         return;
       }
 
-      console.error('Failed to load global match data:', error);
+      logger.error('Failed to load global match data:', error);
       showToast('Failed to load global match data');
     } finally {
       if (requestId !== loadRowsRequestRef.current) {
@@ -672,7 +673,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
 
       const localKeys = storage.getKeysByPrefix('matchScout:');
       localKeys.forEach((key) => {
-        const record = storage.get<SyncRecord<any>>(key);
+        const record = storage.get<SyncRecord<unknown>>(key);
         if (!record?.data || typeof record.data !== 'object') {
           return;
         }
@@ -698,7 +699,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       });
       showToast(`Deleted match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
-      console.error('Failed to delete global match row:', error);
+      logger.error('Failed to delete global match row:', error);
       showToast('Delete failed. Try again.');
     } finally {
       setPendingDeletes((current) => {
@@ -721,7 +722,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
     try {
       const localKeys = storage.getKeysByPrefix('matchScout:');
       localKeys.forEach((key) => {
-        const localRecord = storage.get<SyncRecord<any>>(key);
+        const localRecord = storage.get<SyncRecord<unknown>>(key);
         if (!localRecord?.data || typeof localRecord.data !== 'object') {
           return;
         }
@@ -750,7 +751,7 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
       });
       showToast(`Approved match ${row.matchNumber} team ${row.teamNumber}`);
     } catch (error) {
-      console.error('Failed to approve global match row:', error);
+      logger.error('Failed to approve global match row:', error);
       showToast('Approval failed. Try again.');
     } finally {
       setPendingApprovals((current) => {
@@ -795,13 +796,13 @@ export function AdminGlobalMatchData({ scoutProfiles = [] }: Props) {
           deletedIds.add(row.id);
         } catch (error) {
           failedCount += 1;
-          console.error('Failed to bulk delete collector row:', error);
+          logger.error('Failed to bulk delete collector row:', error);
         }
       }
 
       const localKeys = storage.getKeysByPrefix('matchScout:');
       localKeys.forEach((key) => {
-        const localRecord = storage.get<SyncRecord<any>>(key);
+        const localRecord = storage.get<SyncRecord<unknown>>(key);
         if (!localRecord?.data || typeof localRecord.data !== 'object') {
           return;
         }

@@ -45,6 +45,13 @@ type TeamHeatmapSummary = {
   totalShots: number;
 };
 
+type SupabaseMatchScoutRow = {
+  team_number?: number | null;
+  match_number?: number | null;
+  data: unknown;
+  updated_at?: string | null;
+};
+
 const LOCKED_TEAM_NUMBER = 423;
 
 function parseEventYear(eventKey: string): number | null {
@@ -299,7 +306,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
         }
       });
 
-      (remoteRows || []).forEach((row: any) => {
+      ((remoteRows || []) as SupabaseMatchScoutRow[]).forEach((row) => {
         const rawPayload = normalizePayload(row.data);
         if (!isRecord(rawPayload)) {
           return;
@@ -787,5 +794,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
     </div>
   );
 }
+
+
 
 

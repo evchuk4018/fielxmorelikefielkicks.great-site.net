@@ -33,6 +33,34 @@ const EMPTY_COUNTS: EntryCounts = {
 
 const TEAM_FILTER_CHUNK_SIZE = 20;
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function asSupabaseRows(value: unknown): SupabaseRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value as SupabaseRow[];
+}
+
+function toEntryValue(value: unknown): number | string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value.trim();
+  }
+
+  return 'Unknown';
+}
+
 function chunkTeamNumbers(values: number[], size: number): number[][] {
   if (values.length === 0) {
     return [];
@@ -65,7 +93,7 @@ async function fetchByTeamChunks(
   if (normalized.length === 0) {
     const { data, error } = await supabase.from(table).select(selectClause);
     return {
-      data: ((data || []) as unknown as SupabaseRow[]),
+      data: asSupabaseRows(data),
       error,
     };
   }
@@ -86,7 +114,7 @@ async function fetchByTeamChunks(
     }
 
     if (Array.isArray(result.data)) {
-      mergedData.push(...(result.data as unknown as SupabaseRow[]));
+      mergedData.push(...asSupabaseRows(result.data));
     }
   });
 
@@ -147,13 +175,13 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
       const localSelectedEntries: RawEntry[] = [];
 
       localPitKeys.forEach((key) => {
-        const record = storage.get<SyncRecord<any>>(key);
+        const record = storage.get<SyncRecord<Record<string, unknown>>>(key);
         if (!record) {
           return;
         }
 
         const payloadEventKey = getPayloadEventKey(record.data) || 'unknown';
-        const teamNumber = record.data?.teamNumber ?? 'Unknown';
+        const teamNumber = toEntryValue(record.data?.teamNumber);
         const entry: RawEntry = {
           key: `pit:${payloadEventKey}:${teamNumber}`,
           type: 'pit',
@@ -175,7 +203,7 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
       });
 
       localMatchKeys.forEach((key) => {
-        const record = storage.get<SyncRecord<any>>(key);
+        const record = storage.get<SyncRecord<Record<string, unknown>>>(key);
         if (!record) {
           return;
         }
@@ -185,8 +213,8 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
           return;
         }
 
-        const matchNumber = record.data?.matchNumber ?? 'Unknown';
-        const teamNumber = record.data?.teamNumber ?? 'Unknown';
+        const matchNumber = toEntryValue(record.data?.matchNumber);
+        const teamNumber = toEntryValue(record.data?.teamNumber);
         const entry: RawEntry = {
           key: `match:${matchNumber}:${teamNumber}`,
           type: 'match',
@@ -429,14 +457,14 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
       const remoteSelectedEntries: RawEntry[] = [];
 
       remoteSelectedPitRows.forEach((row) => {
-          const payload = normalizePayload(row.data) as any;
+          const payload = asRecord(normalizePayload(row.data));
           const payloadEventKey =
             (row.event_key || '').toString().trim().toLowerCase() || getPayloadEventKey(payload) || '';
           const payloadWithContext = {
             ...payload,
             eventKey: payloadEventKey,
           };
-          const teamNumber = row.team_number ?? payload?.teamNumber ?? 'Unknown';
+          const teamNumber = toEntryValue(row.team_number ?? payload.teamNumber);
           remoteSelectedEntries.push({
             key: `pit:${payloadEventKey || 'unknown'}:${teamNumber}`,
             type: 'pit',
@@ -448,13 +476,13 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
       });
 
       remoteSelectedMatchRows.forEach((row) => {
-          const payload = normalizePayload(row.data) as any;
+          const payload = asRecord(normalizePayload(row.data));
           const payloadWithContext = {
             ...payload,
             eventKey: (row.event_key || '').toString().trim().toLowerCase() || getPayloadEventKey(payload),
           };
-          const matchNumber = row.match_number ?? payload?.matchNumber ?? 'Unknown';
-          const teamNumber = row.team_number ?? payload?.teamNumber ?? 'Unknown';
+          const matchNumber = toEntryValue(row.match_number ?? payload.matchNumber);
+          const teamNumber = toEntryValue(row.team_number ?? payload.teamNumber);
           remoteSelectedEntries.push({
             key: `match:${matchNumber}:${teamNumber}`,
             type: 'match',

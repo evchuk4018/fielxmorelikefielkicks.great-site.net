@@ -1,3 +1,5 @@
+import { apiLogger } from '../../_shared/logger.js';
+
 const RESOURCE_MAP = {
   event: {
     pathSuffix: 'simple',
@@ -107,7 +109,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid TBA request target' });
   }
 
-  console.log(`[api/tba/${config.logName}] request`, {
+  apiLogger.debug(`[api/tba/${config.logName}] request`, {
     originalEventKey: eventKey,
     normalizedEventKey,
     path,
@@ -124,7 +126,7 @@ export default async function handler(req, res) {
     );
 
     if (!response.ok) {
-      console.error(`[api/tba/${config.logName}] upstream failed`, {
+      apiLogger.error(`[api/tba/${config.logName}] upstream failed`, {
         normalizedEventKey,
         status: response.status,
       });
@@ -132,14 +134,14 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    console.log(`[api/tba/${config.logName}] success`, {
+    apiLogger.debug(`[api/tba/${config.logName}] success`, {
       normalizedEventKey,
       count: Array.isArray(data) ? data.length : null,
       eventName: !Array.isArray(data) ? data?.name || null : null,
     });
     return res.status(200).json(data);
   } catch (error) {
-    console.error(`[api/tba/${config.logName}] exception`, {
+    apiLogger.error(`[api/tba/${config.logName}] exception`, {
       normalizedEventKey,
       error: error instanceof Error ? error.message : String(error),
     });

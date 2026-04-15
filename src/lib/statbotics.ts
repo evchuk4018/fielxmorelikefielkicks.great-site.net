@@ -1,4 +1,5 @@
 import { tba } from './tba';
+import { logger } from './logger';
 
 const EVENT_TEAMS_TTL_MS = 5 * 60 * 1000;
 const TEAM_EVENT_TTL_MS = 5 * 60 * 1000;
@@ -165,7 +166,7 @@ async function fetchTeamEvent(teamNumber: number, eventKey: string): Promise<Sta
     const response = await fetchWithTimeout(requestUrl, TEAM_EVENT_TIMEOUT_MS);
     const responseAt = performance.now();
 
-    console.log('[statbotics] teamEvent:response', {
+    logger.debug('[statbotics] teamEvent:response', {
       teamNumber,
       eventKey,
       ok: response.ok,
@@ -277,7 +278,7 @@ function mergeWithTbaRoster(teams: TbaTeamLike[], fallbackRows: StatboticsTeamEv
 async function fetchEventTeamsByTeam(eventKey: string, teamNumbers: number[]): Promise<StatboticsTeamEvent[]> {
   const startedAt = performance.now();
 
-  console.log('[statbotics] teamEvent:fallback-start', {
+  logger.debug('[statbotics] teamEvent:fallback-start', {
     eventKey,
     teamsRequested: teamNumbers.length,
   });
@@ -305,7 +306,7 @@ async function fetchEventTeamsByTeam(eventKey: string, teamNumbers: number[]): P
   const missingRows = uniqueTeamNumbers.length - rows.length;
 
   const completedAt = performance.now();
-  console.log('[statbotics] teamEvent:fallback-complete', {
+  logger.debug('[statbotics] teamEvent:fallback-complete', {
     eventKey,
     teamsRequested: uniqueTeamNumbers.length,
     rowsReturned: rows.length,
@@ -335,11 +336,11 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
   const request = (async () => {
     const startedAt = performance.now();
 
-    console.log('[statbotics] eventTeams:request', { eventKey, requestUrl });
+    logger.debug('[statbotics] eventTeams:request', { eventKey, requestUrl });
     const response = await fetchWithTimeout(requestUrl, EVENT_TEAMS_TIMEOUT_MS);
     const responseAt = performance.now();
 
-    console.log('[statbotics] eventTeams:response', {
+    logger.debug('[statbotics] eventTeams:response', {
       eventKey,
       ok: response.ok,
       status: response.status,
@@ -347,7 +348,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
     });
 
     if (!response.ok) {
-      console.error('[statbotics] eventTeams:failed', { eventKey, status: response.status });
+      logger.error('[statbotics] eventTeams:failed', { eventKey, status: response.status });
 
       try {
         const cachedTeams = tba.getTeams();
@@ -359,7 +360,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
 
         const mergedFallback = mergeWithTbaRoster(teams as TbaTeamLike[], fallbackRows);
 
-        console.log('[statbotics] eventTeams:fallback-success', {
+        logger.debug('[statbotics] eventTeams:fallback-success', {
           eventKey,
           statsRows: fallbackRows.length,
           mergedRows: mergedFallback.length,
@@ -368,7 +369,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
         writeCache(eventTeamsCache, cacheKey, mergedFallback, Math.floor(EVENT_TEAMS_TTL_MS / 2));
         return mergedFallback;
       } catch (error) {
-        console.error('[statbotics] eventTeams:fallback-failed', {
+        logger.error('[statbotics] eventTeams:fallback-failed', {
           eventKey,
           error: String(error),
         });
@@ -382,7 +383,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
     const parsedAt = performance.now();
 
     if (Array.isArray(payload)) {
-      console.log('[statbotics] eventTeams:payload', {
+      logger.debug('[statbotics] eventTeams:payload', {
         eventKey,
         shape: 'array',
         rows: payload.length,
@@ -397,7 +398,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
     if (payload && typeof payload === 'object') {
       const nestedTeams = (payload as { teams?: unknown }).teams;
       if (Array.isArray(nestedTeams)) {
-        console.log('[statbotics] eventTeams:payload', {
+        logger.debug('[statbotics] eventTeams:payload', {
           eventKey,
           shape: 'object.teams',
           rows: nestedTeams.length,
@@ -410,7 +411,7 @@ async function fetchEventTeams(eventKey: string): Promise<StatboticsTeamEvent[] 
       }
     }
 
-    console.warn('[statbotics] eventTeams:payload-unexpected-shape', {
+    logger.warn('[statbotics] eventTeams:payload-unexpected-shape', {
       eventKey,
       payloadType: typeof payload,
       parseMs: Math.round(parsedAt - responseAt),

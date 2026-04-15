@@ -1,3 +1,5 @@
+import { apiLogger } from '../_shared/logger.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -24,7 +26,7 @@ export default async function handler(req, res) {
 
   const targetUrl = `https://api.statbotics.io/v3/team_event/${normalizedTeamNumber}/${encodeURIComponent(normalizedEventKey)}`;
 
-  console.log('[api/statbotics/team_event] request', {
+  apiLogger.debug('[api/statbotics/team_event] request', {
     teamNumber: normalizedTeamNumber,
     originalEventKey: eventKey,
     normalizedEventKey,
@@ -39,7 +41,7 @@ export default async function handler(req, res) {
     const body = await response.text();
 
     if (!response.ok) {
-      console.error('[api/statbotics/team_event] upstream failed', {
+      apiLogger.error('[api/statbotics/team_event] upstream failed', {
         teamNumber: normalizedTeamNumber,
         normalizedEventKey,
         status: response.status,
@@ -54,7 +56,7 @@ export default async function handler(req, res) {
     if (error instanceof Error && error.name === 'AbortError') {
       return res.status(504).json({ error: 'Statbotics team_event request timed out' });
     }
-    console.error('[api/statbotics/team_event] exception', {
+    apiLogger.error('[api/statbotics/team_event] exception', {
       teamNumber: normalizedTeamNumber,
       normalizedEventKey,
       error: error instanceof Error ? error.message : String(error),

@@ -125,7 +125,7 @@ export function saveRecord<T>(type: 'pitScout' | 'matchScout', key: string, data
   set(key, record);
 
   // Add to sync queue
-  const queue = get<SyncRecord<any>[]>(SYNC_QUEUE_KEY) || [];
+  const queue = get<SyncRecord<unknown>[]>(SYNC_QUEUE_KEY) || [];
   const existingIndex = queue.findIndex(r => r.id === record.id);
   if (existingIndex >= 0) {
     queue[existingIndex] = record;
@@ -136,8 +136,8 @@ export function saveRecord<T>(type: 'pitScout' | 'matchScout', key: string, data
   set(SYNC_QUEUE_KEY, queue);
 }
 
-export function getSyncQueue(): SyncRecord<any>[] {
-  return get<SyncRecord<any>[]>(SYNC_QUEUE_KEY) || [];
+export function getSyncQueue(): SyncRecord<unknown>[] {
+  return get<SyncRecord<unknown>[]>(SYNC_QUEUE_KEY) || [];
 }
 
 export function removeFromSyncQueue(ids: string[]): void {
@@ -161,7 +161,7 @@ export function removeMatchScoutRecordById(recordId: string): void {
 
   const keys = getAllKeys().filter((key) => key.startsWith('matchScout:'));
   keys.forEach((key) => {
-    const record = get<SyncRecord<any>>(key);
+    const record = get<SyncRecord<unknown>>(key);
     if (record?.id === recordId) {
       deleteKey(key);
     }
@@ -169,7 +169,7 @@ export function removeMatchScoutRecordById(recordId: string): void {
 }
 
 export function removeMatchScoutRecordByKey(key: string): void {
-  const record = get<SyncRecord<any>>(key);
+  const record = get<SyncRecord<unknown>>(key);
   if (!record) {
     deleteKey(key);
     return;

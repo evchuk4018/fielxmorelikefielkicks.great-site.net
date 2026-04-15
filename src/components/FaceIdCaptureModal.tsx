@@ -29,6 +29,16 @@ type FaceIdCaptureModalProps = {
   onComplete: (result: CaptureResult) => Promise<void>;
 };
 
+type FaceDetectionSample = {
+  descriptor?: Float32Array;
+  detection?: {
+    box?: {
+      width?: number;
+      height?: number;
+    };
+  };
+};
+
 let modelLoadPromise: Promise<void> | null = null;
 
 function normalizeVector(vector: number[]): number[] {
@@ -206,13 +216,13 @@ export function FaceIdCaptureModal({ isOpen, mode, onClose, onComplete }: FaceId
     try {
       setProcessedFrames((count) => count + 1);
 
-      let detection: any = null;
+      let detection: FaceDetectionSample | null = null;
 
       try {
         detection = await faceapi
           .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
           .withFaceLandmarks()
-          .withFaceDescriptor();
+          .withFaceDescriptor() as FaceDetectionSample;
       } catch {
         detection = null;
       }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../lib/storage';
-import { MatchScoutData, AllianceColor, AutoClimbResult, EndGameClimbResult, HubScoringStrategy, CardReceived } from '../types';
+import { MatchScoutData, AllianceColor, AutoClimbResult, EndGameClimbResult, HubScoringStrategy, CardReceived, SyncRecord } from '../types';
 import { Stepper } from '../components/Stepper';
 import { Toggle, MultiToggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
@@ -35,7 +35,7 @@ export function MatchScouting() {
 
   useEffect(() => {
     if (data.matchNumber && data.teamNumber) {
-      const saved = storage.get<any>(`matchScout:${data.matchNumber}:${data.teamNumber}`);
+      const saved = storage.get<SyncRecord<MatchScoutData>>(`matchScout:${data.matchNumber}:${data.teamNumber}`);
       if (saved && saved.data) {
         setData(saved.data);
       }
