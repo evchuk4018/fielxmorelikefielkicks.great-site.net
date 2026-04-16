@@ -146,7 +146,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     setHasExistingRecord(false);
-  }, [activeEventKey, activeProfile?.eventKey, activeProfile?.id, data.teamNumber]);
+  }, [activeEventKey, activeProfile?.id, data.teamNumber]);
 
   const scoutedTeamNumbers = useMemo(() => {
     if (!activeProfile?.id || !activeEventKey) {
