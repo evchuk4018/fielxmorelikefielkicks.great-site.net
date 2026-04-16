@@ -1,7 +1,15 @@
 import { showToast } from '../../components/Toast';
-import { createProfile, getActiveProfile, getProfileByEventKey, getProfiles, setActiveProfileId } from '../../lib/competitionProfiles';
+import {
+  createProfile,
+  getActiveProfile,
+  getProfileByEventKey,
+  getProfiles,
+  saveProfiles,
+  setActiveProfileId,
+  setProfileTeams,
+} from '../../lib/competitionProfiles';
 import { tba } from '../../lib/tba';
-import { TBAEvent } from '../../types';
+import { CompetitionProfile, TBAEvent } from '../../types';
 import { EventTab, Location } from '../types';
 
 type RefreshProfilesParams = {
@@ -132,6 +140,24 @@ export async function ensureScoutDefaultEventProfile(params: {
   const ensuredProfile = getProfileByEventKey(normalizedEventKey);
   if (ensuredProfile) {
     setActiveProfileId(ensuredProfile.id);
+  } else {
+    const now = Date.now();
+    const localFallbackProfile: CompetitionProfile = {
+      id: `${normalizedEventKey}-${now}`,
+      eventKey: normalizedEventKey,
+      name: normalizedEventKey.toUpperCase(),
+      location: 'Unknown location',
+      year: undefined,
+      teamCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    saveProfiles([localFallbackProfile, ...getProfiles()]);
+    setProfileTeams(localFallbackProfile.id, []);
+    setActiveProfileId(localFallbackProfile.id);
+    console.error('Created local-only fallback default scout event profile; scout can continue without admin intervention', {
+      eventKey: normalizedEventKey,
+    });
   }
 
   refreshProfiles({ setProfiles, setActiveProfile });
