@@ -1,5 +1,7 @@
 import { showToast } from '../../components/Toast';
 import { createProfile, getActiveProfile, getProfiles, setActiveProfileId } from '../../lib/competitionProfiles';
+import { mergeEventTeams } from '../../lib/eventTeams';
+import { statbotics } from '../../lib/statbotics';
 import { tba } from '../../lib/tba';
 import { TBAEvent } from '../../types';
 import { EventTab, Location } from '../types';
@@ -74,11 +76,13 @@ export async function createCompetitionProfile(params: {
 
   setIsCreatingProfile(true);
   try {
-    const [teams, eventInfo] = await Promise.all([
+    const [tbaTeams, eventInfo, statboticsTeams] = await Promise.all([
       tba.fetchTeams(eventKey),
       tba.fetchEvent(eventKey).catch(() => null as TBAEvent | null),
+      statbotics.fetchEventTeams(eventKey).catch(() => null),
     ]);
 
+    const teams = mergeEventTeams(tbaTeams, statboticsTeams || []);
     await createProfile({ eventKey, eventInfo, teams });
     refreshProfiles({ setProfiles, setActiveProfile });
     setLocation('event');

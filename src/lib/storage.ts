@@ -9,6 +9,12 @@ type MatchScoutKeyInput = {
   matchKey?: string | null;
 };
 
+type PitScoutKeyInput = {
+  profileId: string;
+  teamNumber: number | string;
+  matchNumber?: number | string | null;
+};
+
 function toMatchScoutKeyNumber(value: number | string | null | undefined): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return Number.isInteger(value) && value > 0 ? value : null;
@@ -82,6 +88,43 @@ export function getMatchScoutStorageKeyCandidates(input: MatchScoutKeyInput): st
     keys.push(`matchScout:${matchNumber}:${teamNumber}`);
   }
 
+  return Array.from(new Set(keys));
+}
+
+export function buildPitScoutStorageKey(input: PitScoutKeyInput): string {
+  const normalizedProfileId = input.profileId.trim();
+  if (!normalizedProfileId) {
+    throw new Error('A valid profileId is required for pit scout storage key');
+  }
+
+  const teamNumber = toMatchScoutKeyNumber(input.teamNumber);
+  if (!teamNumber) {
+    throw new Error('A valid team number is required for pit scout storage key');
+  }
+
+  const matchNumber = toMatchScoutKeyNumber(input.matchNumber);
+  if (matchNumber) {
+    return `pitScout:${normalizedProfileId}:${matchNumber}:${teamNumber}`;
+  }
+
+  return `pitScout:${normalizedProfileId}:${teamNumber}`;
+}
+
+export function getPitScoutStorageKeyCandidates(input: PitScoutKeyInput): string[] {
+  const normalizedProfileId = input.profileId.trim();
+  const teamNumber = toMatchScoutKeyNumber(input.teamNumber);
+  if (!normalizedProfileId || !teamNumber) {
+    return [];
+  }
+
+  const keys: string[] = [];
+  const matchNumber = toMatchScoutKeyNumber(input.matchNumber);
+
+  if (matchNumber) {
+    keys.push(`pitScout:${normalizedProfileId}:${matchNumber}:${teamNumber}`);
+  }
+
+  keys.push(`pitScout:${normalizedProfileId}:${teamNumber}`);
   return Array.from(new Set(keys));
 }
 
@@ -185,6 +228,8 @@ export const storage = {
   getKeysByPrefix,
   buildMatchScoutStorageKey,
   getMatchScoutStorageKeyCandidates,
+  buildPitScoutStorageKey,
+  getPitScoutStorageKeyCandidates,
   saveRecord,
   getSyncQueue,
   removeFromSyncQueue,

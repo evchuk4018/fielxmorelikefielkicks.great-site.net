@@ -118,10 +118,23 @@ export const syncManager = {
           },
         } as SyncRecord<any>;
 
-        const key = `pitScout:${record.data.profileId}:${record.data.teamNumber}`;
-        const localRecord = storage.get<SyncRecord<any>>(key);
+        const candidates = storage.getPitScoutStorageKeyCandidates({
+          profileId: record.data.profileId,
+          teamNumber: record.data.teamNumber,
+          matchNumber: record.data.matchNumber,
+        });
+        const localRecord = candidates
+          .map((key) => storage.get<SyncRecord<any>>(key))
+          .find((candidate) => Boolean(candidate));
         if (!localRecord || record.timestamp > localRecord.timestamp) {
-          storage.set(key, record);
+          storage.set(
+            storage.buildPitScoutStorageKey({
+              profileId: record.data.profileId,
+              teamNumber: record.data.teamNumber,
+              matchNumber: record.data.matchNumber,
+            }),
+            record,
+          );
         }
       });
 

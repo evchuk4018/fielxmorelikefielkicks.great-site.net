@@ -251,6 +251,38 @@ export function setProfileTeams(profileId: string, teams: TBATeam[]): void {
   storage.set(getProfileTeamsKey(profileId), teams);
 }
 
+export async function updateProfileTeams(profileId: string, teams: TBATeam[]): Promise<CompetitionProfile | null> {
+  const profiles = getProfiles();
+  const current = profiles.find((profile) => profile.id === profileId);
+  if (!current) {
+    return null;
+  }
+
+  const now = Date.now();
+  const nextProfile: CompetitionProfile = {
+    ...current,
+    teamCount: teams.length,
+    updatedAt: now,
+  };
+
+  saveProfiles(profiles.map((profile) => (profile.id === profileId ? nextProfile : profile)));
+  setProfileTeams(profileId, teams);
+
+  const { error } = await supabase
+    .from('competition_profiles')
+    .upsert(profileToRow(nextProfile, teams), { onConflict: 'event_key' });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to update competition profile teams');
+  }
+
+  if (getActiveProfileId() === profileId) {
+    syncLegacyActiveContext(nextProfile);
+  }
+
+  return nextProfile;
+}
+
 export function getActiveProfileId(): string | null {
   return storage.get<string>(ACTIVE_PROFILE_ID_KEY);
 }

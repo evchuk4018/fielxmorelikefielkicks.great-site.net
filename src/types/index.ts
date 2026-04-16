@@ -41,6 +41,7 @@ export interface AutonPathData {
 export interface PitScoutData {
   eventKey?: string;
   profileId?: string;
+  matchNumber?: number | '';
   teamNumber: number | '';
   photoUrls: string[];
   canClimbTower: boolean;
