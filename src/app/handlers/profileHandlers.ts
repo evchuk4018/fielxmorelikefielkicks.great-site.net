@@ -28,9 +28,14 @@ export function selectProfile(params: {
     return;
   }
   setActiveProfileId(profileId);
-  refreshProfiles({ setProfiles, setActiveProfile });
-  const selectedProfile = getActiveProfile();
+  const selectedProfile = getProfiles().find((profile) => profile.id === profileId) || null;
   const selectedProfileTeams = selectedProfile ? getProfileTeams(selectedProfile.id) : [];
+  const finalizeSelection = () => {
+    refreshProfiles({ setProfiles, setActiveProfile });
+    setLocation('event');
+    setActiveTab('pit');
+  };
+
   if (selectedProfile && selectedProfileTeams.length === 0) {
     void (async () => {
       try {
@@ -41,15 +46,16 @@ export function selectProfile(params: {
             eventInfo: null,
             teams,
           });
-          refreshProfiles({ setProfiles, setActiveProfile });
         }
       } catch {
         // Best-effort backfill for legacy profiles with missing team caches.
+      } finally {
+        finalizeSelection();
       }
     })();
+    return;
   }
-  setLocation('event');
-  setActiveTab('pit');
+  finalizeSelection();
 }
 
 export async function createCompetitionProfile(params: {
