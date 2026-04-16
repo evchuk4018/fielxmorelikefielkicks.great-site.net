@@ -142,12 +142,14 @@ export async function ensureScoutDefaultEventProfile(params: {
     setActiveProfileId(ensuredProfile.id);
   } else {
     const now = Date.now();
+    const parsedYear = Number.parseInt(normalizedEventKey.slice(0, 4), 10);
+    const fallbackYear = Number.isFinite(parsedYear) ? parsedYear : undefined;
     const localFallbackProfile: CompetitionProfile = {
       id: `${normalizedEventKey}-${now}`,
       eventKey: normalizedEventKey,
-      name: normalizedEventKey.toUpperCase(),
+      name: `${normalizedEventKey.toUpperCase()} (Offline)`,
       location: 'Unknown location',
-      year: undefined,
+      year: fallbackYear,
       teamCount: 0,
       createdAt: now,
       updatedAt: now,
