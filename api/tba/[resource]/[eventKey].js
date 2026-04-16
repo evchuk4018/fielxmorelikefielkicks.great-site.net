@@ -99,6 +99,7 @@ const HARDCODED_TEAMS_BY_EVENT = {
     { team_number: 10993, nickname: 'EP Robotics', city: 'Enola', state_prov: 'Pennsylvania' },
   ],
 };
+const MAX_TBA_TEAM_PAGES = 100;
 
 function createHardcodedTeamRows(eventKey) {
   const rows = HARDCODED_TEAMS_BY_EVENT[eventKey];
@@ -166,6 +167,47 @@ function resolveResourcePath(resource, targetValue) {
   return `/event/${normalizedTargetValue}/${config.pathSuffix}`;
 }
 
+async function fetchAllEventTeamsFromTba(eventKey, apiKey) {
+  const allTeams = [];
+  const seenTeamNumbers = new Set();
+
+  for (let page = 0; page < MAX_TBA_TEAM_PAGES; page += 1) {
+    const response = await fetch(
+      `https://www.thebluealliance.com/api/v3/event/${encodeURIComponent(eventKey)}/teams/${page}/simple`,
+      {
+        headers: {
+          'X-TBA-Auth-Key': apiKey,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      if (page > 0 && response.status === 404) {
+        break;
+      }
+
+      throw new Error(`TBA request failed with status ${response.status}`);
+    }
+
+    const pageData = await response.json();
+    if (!Array.isArray(pageData) || pageData.length === 0) {
+      break;
+    }
+
+    pageData.forEach((team) => {
+      const teamNumber = Number(team?.team_number);
+      if (!Number.isInteger(teamNumber) || teamNumber <= 0 || seenTeamNumbers.has(teamNumber)) {
+        return;
+      }
+
+      seenTeamNumbers.add(teamNumber);
+      allTeams.push(team);
+    });
+  }
+
+  return allTeams;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -214,6 +256,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (resource === 'teams') {
+      const teams = await fetchAllEventTeamsFromTba(normalizedEventKey, apiKey);
+      console.log('[api/tba/teams] success', {
+        normalizedEventKey,
+        count: teams.length,
+      });
+      return res.status(200).json(teams);
+    }
+
     const response = await fetch(
       `https://www.thebluealliance.com/api/v3${path}`,
       {

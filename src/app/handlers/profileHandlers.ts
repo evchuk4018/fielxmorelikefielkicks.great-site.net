@@ -15,7 +15,7 @@ export function refreshProfiles(params: RefreshProfilesParams) {
   setActiveProfile(getActiveProfile());
 }
 
-export function selectProfile(params: {
+export async function selectProfile(params: {
   profileId: string;
   isAdminSignedIn: boolean;
   setLocation: (location: Location) => void;
@@ -28,6 +28,26 @@ export function selectProfile(params: {
     return;
   }
   setActiveProfileId(profileId);
+
+  const selectedProfile = getProfiles().find((profile) => profile.id === profileId);
+  if (selectedProfile?.eventKey) {
+    try {
+      const [teams, eventInfo] = await Promise.all([
+        tba.fetchTeams(selectedProfile.eventKey),
+        tba.fetchEvent(selectedProfile.eventKey).catch(() => null as TBAEvent | null),
+      ]);
+
+      await createProfile({
+        eventKey: selectedProfile.eventKey,
+        eventInfo,
+        teams,
+      });
+
+    } catch {
+      // Keep profile selection usable even when refresh fails.
+    }
+  }
+
   refreshProfiles({ setProfiles, setActiveProfile });
   setLocation('event');
   setActiveTab('pit');
