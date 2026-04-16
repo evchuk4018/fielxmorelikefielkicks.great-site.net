@@ -118,6 +118,20 @@ export async function ensureScoutDefaultEventProfile(params: {
       eventKey: normalizedEventKey,
       error,
     });
+
+    try {
+      await createProfile({ eventKey: normalizedEventKey, eventInfo: null, teams: [] });
+    } catch (fallbackError) {
+      console.error('Failed to create fallback default scout event profile', {
+        eventKey: normalizedEventKey,
+        error: fallbackError,
+      });
+    }
+  }
+
+  const ensuredProfile = getProfileByEventKey(normalizedEventKey);
+  if (ensuredProfile) {
+    setActiveProfileId(ensuredProfile.id);
   }
 
   refreshProfiles({ setProfiles, setActiveProfile });
