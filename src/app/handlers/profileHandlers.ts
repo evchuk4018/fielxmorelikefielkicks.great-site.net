@@ -1,5 +1,5 @@
 import { showToast } from '../../components/Toast';
-import { createProfile, getActiveProfile, getProfiles, setActiveProfileId } from '../../lib/competitionProfiles';
+import { createProfile, getActiveProfile, getProfileTeams, getProfiles, setActiveProfileId } from '../../lib/competitionProfiles';
 import { tba } from '../../lib/tba';
 import { TBAEvent } from '../../types';
 import { EventTab, Location } from '../types';
@@ -28,9 +28,34 @@ export function selectProfile(params: {
     return;
   }
   setActiveProfileId(profileId);
-  refreshProfiles({ setProfiles, setActiveProfile });
-  setLocation('event');
-  setActiveTab('pit');
+  const selectedProfile = getProfiles().find((profile) => profile.id === profileId) || null;
+  const selectedProfileTeams = selectedProfile ? getProfileTeams(selectedProfile.id) : [];
+  const finalizeSelection = () => {
+    refreshProfiles({ setProfiles, setActiveProfile });
+    setLocation('event');
+    setActiveTab('pit');
+  };
+
+  if (selectedProfile && selectedProfileTeams.length === 0) {
+    void (async () => {
+      try {
+        const teams = await tba.fetchTeams(selectedProfile.eventKey);
+        if (teams.length > 0) {
+          await createProfile({
+            eventKey: selectedProfile.eventKey,
+            eventInfo: null,
+            teams,
+          });
+        }
+      } catch {
+        // Best-effort backfill for legacy profiles with missing team caches.
+      } finally {
+        finalizeSelection();
+      }
+    })();
+    return;
+  }
+  finalizeSelection();
 }
 
 export async function createCompetitionProfile(params: {
