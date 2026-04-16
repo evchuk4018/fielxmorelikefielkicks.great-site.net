@@ -1,13 +1,28 @@
 import { showToast } from '../../components/Toast';
 import { createProfile, getActiveProfile, getProfileTeams, getProfiles, setActiveProfileId } from '../../lib/competitionProfiles';
+import { PRESCOUTING_TEAMS } from '../../prescouting/constants';
 import { tba } from '../../lib/tba';
-import { TBAEvent } from '../../types';
+import { TBAEvent, TBATeam } from '../../types';
 import { EventTab, Location } from '../types';
 
 type RefreshProfilesParams = {
   setProfiles: (profiles: ReturnType<typeof getProfiles>) => void;
   setActiveProfile: (profile: ReturnType<typeof getActiveProfile>) => void;
 };
+
+const HARDCODED_PROFILE_TEAMS: TBATeam[] = PRESCOUTING_TEAMS.map((row) => ({
+  key: `frc${row.teamNumber}`,
+  team_number: row.teamNumber,
+  nickname: `Team ${row.teamNumber}`,
+  name: `FRC Team ${row.teamNumber}`,
+  city: '',
+  state_prov: '',
+  country: '',
+}));
+
+function getHardcodedProfileTeams(): TBATeam[] {
+  return HARDCODED_PROFILE_TEAMS.map((team) => ({ ...team }));
+}
 
 export function refreshProfiles(params: RefreshProfilesParams) {
   const { setProfiles, setActiveProfile } = params;
@@ -39,7 +54,7 @@ export function selectProfile(params: {
   if (selectedProfile && selectedProfileTeams.length === 0) {
     void (async () => {
       try {
-        const teams = await tba.fetchTeams(selectedProfile.eventKey);
+        const teams = getHardcodedProfileTeams();
         if (teams.length > 0) {
           await createProfile({
             eventKey: selectedProfile.eventKey,
@@ -79,10 +94,8 @@ export async function createCompetitionProfile(params: {
 
   setIsCreatingProfile(true);
   try {
-    const [teams, eventInfo] = await Promise.all([
-      tba.fetchTeams(eventKey),
-      tba.fetchEvent(eventKey).catch(() => null as TBAEvent | null),
-    ]);
+    const teams = getHardcodedProfileTeams();
+    const eventInfo = await tba.fetchEvent(eventKey).catch(() => null as TBAEvent | null);
 
     await createProfile({ eventKey, eventInfo, teams });
     refreshProfiles({ setProfiles, setActiveProfile });
