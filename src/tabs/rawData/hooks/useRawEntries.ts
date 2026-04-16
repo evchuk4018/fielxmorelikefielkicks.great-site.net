@@ -125,6 +125,16 @@ function buildEntryCounts(localIndexes: RawIndexEntry[], remoteIndexes: RawIndex
   };
 }
 
+function getPitEntryKey(eventKey: string, teamNumber: unknown, matchNumber: unknown): string {
+  const normalizedEventKey = (eventKey || 'unknown').toString().trim().toLowerCase() || 'unknown';
+  const normalizedMatchNumber = typeof matchNumber === 'number' && Number.isInteger(matchNumber) && matchNumber > 0
+    ? matchNumber
+    : null;
+  return normalizedMatchNumber
+    ? `pit:${normalizedEventKey}:${normalizedMatchNumber}:${teamNumber}`
+    : `pit:${normalizedEventKey}:${teamNumber}`;
+}
+
 export function useRawEntries({ activeEventKey, isGlobalScope, profileId, selectedTeam }: UseRawEntriesArgs): UseRawEntriesResult {
   const [entries, setEntries] = useState<RawEntry[]>([]);
   const [counts, setCounts] = useState<EntryCounts>(EMPTY_COUNTS);
@@ -155,7 +165,7 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
         const payloadEventKey = getPayloadEventKey(record.data) || 'unknown';
         const teamNumber = record.data?.teamNumber ?? 'Unknown';
         const entry: RawEntry = {
-          key: `pit:${payloadEventKey}:${teamNumber}`,
+          key: getPitEntryKey(payloadEventKey, teamNumber, record.data?.matchNumber),
           type: 'pit',
           teamNumber,
           updatedAt: record.timestamp || 0,
@@ -410,7 +420,7 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
             getPayloadEventKey(normalizePayload(row.data)) ||
             'unknown';
           remoteIndexes.push({
-            key: `pit:${eventKey}:${teamNumber}`,
+            key: getPitEntryKey(eventKey, teamNumber, (normalizePayload(row.data) as any)?.matchNumber),
             type: 'pit',
             updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,
           });
@@ -438,7 +448,7 @@ export function useRawEntries({ activeEventKey, isGlobalScope, profileId, select
           };
           const teamNumber = row.team_number ?? payload?.teamNumber ?? 'Unknown';
           remoteSelectedEntries.push({
-            key: `pit:${payloadEventKey || 'unknown'}:${teamNumber}`,
+            key: getPitEntryKey(payloadEventKey || 'unknown', teamNumber, payload?.matchNumber),
             type: 'pit',
             teamNumber,
             updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,

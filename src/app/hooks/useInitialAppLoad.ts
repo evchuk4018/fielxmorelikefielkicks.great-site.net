@@ -3,8 +3,12 @@ import {
   getProfiles,
   getActiveProfile,
   setActiveProfileId,
+  getProfileTeams,
   hydrateProfilesFromSupabase,
+  updateProfileTeams,
 } from '../../lib/competitionProfiles';
+import { mergeEventTeams } from '../../lib/eventTeams';
+import { statbotics } from '../../lib/statbotics';
 import { syncManager } from '../../lib/sync';
 import {
   clearStoredActiveUserProfileId,
@@ -66,6 +70,21 @@ export function useInitialAppLoad(params: UseInitialAppLoadParams) {
       if (loadedActiveProfile) {
         // Keep legacy keys in sync so existing tabs and storage-backed flows keep working.
         setActiveProfileId(loadedActiveProfile.id);
+
+        try {
+          const localTeams = getProfileTeams(loadedActiveProfile.id);
+          const statboticsTeams = await statbotics.fetchEventTeams(loadedActiveProfile.eventKey);
+          const mergedTeams = mergeEventTeams(localTeams, statboticsTeams || []);
+          if (mergedTeams.length > localTeams.length) {
+            await updateProfileTeams(loadedActiveProfile.id, mergedTeams);
+            if (!isCancelled) {
+              setProfiles(getProfiles());
+              setActiveProfile(getActiveProfile());
+            }
+          }
+        } catch (error) {
+          console.error('Failed to refresh active profile teams:', error);
+        }
       }
 
       try {

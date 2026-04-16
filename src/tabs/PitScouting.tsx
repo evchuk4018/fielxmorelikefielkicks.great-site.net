@@ -17,8 +17,8 @@ type PitScoutingProps = {
   activeProfile: CompetitionProfile | null;
 };
 
-function getScopedPitKey(profileId: string, teamNumber: number): string {
-  return `pitScout:${profileId}:${teamNumber}`;
+function toValidMatchNumber(value: number | '' | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function normalizePhotoUrls(value: unknown): string[] {
@@ -33,6 +33,7 @@ function normalizePhotoUrls(value: unknown): string[] {
 }
 
 const INITIAL_STATE: PitScoutData = {
+  matchNumber: '',
   teamNumber: '',
   photoUrls: [],
   canClimbTower: false,
@@ -109,13 +110,21 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
       return;
     }
 
-    const scopedKey = getScopedPitKey(activeProfile.id, data.teamNumber);
-    const saved = storage.get<any>(scopedKey);
+    const saved = storage
+      .getPitScoutStorageKeyCandidates({
+        profileId: activeProfile.id,
+        teamNumber: data.teamNumber,
+        matchNumber: data.matchNumber,
+      })
+      .map((key) => storage.get<any>(key))
+      .find((record) => Boolean(record?.data));
+
     if (saved && saved.data) {
       setHasExistingRecord(true);
       setData({
         ...INITIAL_STATE,
         ...saved.data,
+        matchNumber: toValidMatchNumber(saved.data.matchNumber) ?? data.matchNumber,
         eventKey: activeProfile.eventKey,
         profileId: activeProfile.id,
         photoUrls: normalizePhotoUrls(saved.data.photoUrls),
@@ -124,24 +133,29 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     setHasExistingRecord(false);
-  }, [activeProfile?.eventKey, activeProfile?.id, data.teamNumber]);
+  }, [activeProfile?.eventKey, activeProfile?.id, data.matchNumber, data.teamNumber]);
 
   const scoutedTeamNumbers = useMemo(() => {
     if (!activeProfile?.id) {
       return new Set<number>();
     }
 
-    const scopedPrefix = `pitScout:${activeProfile.id}:`;
+    const matchNumber = toValidMatchNumber(data.matchNumber);
+    if (!matchNumber) {
+      return new Set<number>();
+    }
+
+    const scopedPrefix = `pitScout:${activeProfile.id}:${matchNumber}:`;
     const scopedKeys = storage.getAllKeys().filter((key) => key.startsWith(scopedPrefix));
     return scopedKeys.reduce((acc, key) => {
-      const teamPart = key.split(':')[2];
+      const teamPart = key.split(':')[3];
       const teamNumber = Number(teamPart);
       if (Number.isFinite(teamNumber) && teamNumber > 0) {
         acc.add(teamNumber);
       }
       return acc;
     }, new Set<number>());
-  }, [activeProfile?.id, data]);
+  }, [activeProfile?.id, data.matchNumber]);
 
   const unscoutedTeams = useMemo(() => {
     return profileTeams
@@ -176,11 +190,18 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
       return;
     }
 
-    const scopedKey = getScopedPitKey(activeProfile.id, team.team_number);
-    const saved = storage.get<any>(scopedKey);
+    const saved = storage
+      .getPitScoutStorageKeyCandidates({
+        profileId: activeProfile.id,
+        teamNumber: team.team_number,
+        matchNumber: data.matchNumber,
+      })
+      .map((key) => storage.get<any>(key))
+      .find((record) => Boolean(record?.data));
     setHasExistingRecord(Boolean(saved?.data));
     setData({
       ...INITIAL_STATE,
+      matchNumber: data.matchNumber,
       teamNumber: team.team_number,
       eventKey: activeProfile.eventKey,
       profileId: activeProfile.id,
@@ -198,7 +219,15 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     };
     setData(newData);
     if (activeProfile?.id && newData.teamNumber) {
-      storage.saveRecord('pitScout', getScopedPitKey(activeProfile.id, newData.teamNumber), newData);
+      storage.saveRecord(
+        'pitScout',
+        storage.buildPitScoutStorageKey({
+          profileId: activeProfile.id,
+          teamNumber: newData.teamNumber,
+          matchNumber: newData.matchNumber,
+        }),
+        newData,
+      );
     }
   };
 
@@ -219,11 +248,22 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
       showToast('Please select a team from the dropdown');
       return;
     }
+
+    if (!toValidMatchNumber(data.matchNumber)) {
+      showToast('Please enter a match number before saving pit scouting');
+      return;
+    }
     // Data is already auto-saved to storage on every change.
     // Just reset the form for the next entry.
-    setData(INITIAL_STATE);
+    const currentMatchNumber = data.matchNumber;
+    setData({
+      ...INITIAL_STATE,
+      matchNumber: currentMatchNumber,
+      eventKey: activeProfile.eventKey,
+      profileId: activeProfile.id,
+    });
     setHasExistingRecord(false);
-    showToast(`Saved pit scouting for team ${data.teamNumber}`);
+    showToast(`Saved pit scouting for team ${data.teamNumber} in match ${currentMatchNumber}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -307,18 +347,36 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
         )}
         
         <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-300">Match Number</label>
+          <input
+            type="number"
+            min={1}
+            value={data.matchNumber}
+            onChange={(e) => updateField('matchNumber', e.target.value ? parseInt(e.target.value, 10) : '')}
+            disabled={!activeProfile}
+            placeholder="Enter match # for this pit record"
+            className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+          />
+          {!data.matchNumber && (
+            <p className="text-xs text-slate-400">Set a match number to scope pit scouting entries per match.</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">Team</label>
           <div className="relative">
             <button
               type="button"
               onClick={() => setIsTeamPickerOpen((prev) => !prev)}
-              disabled={!activeProfile}
+              disabled={!activeProfile || !toValidMatchNumber(data.matchNumber)}
               className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-left flex items-center justify-between gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <span className={selectedTeam ? 'font-mono text-xl' : 'text-slate-400'}>
                 {selectedTeam
                   ? `${selectedTeam.team_number} - ${selectedTeam.nickname || selectedTeam.name || 'Unknown team'}`
-                  : 'Select an unscouted team'}
+                  : data.matchNumber
+                    ? 'Select an unscouted team for this match'
+                    : 'Enter match number first'}
               </span>
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isTeamPickerOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -340,6 +398,8 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
                     <p className="px-3 py-2 text-sm text-slate-400">Select a competition profile first.</p>
                   ) : profileTeams.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-slate-400">No event teams found for this profile.</p>
+                  ) : !toValidMatchNumber(data.matchNumber) ? (
+                    <p className="px-3 py-2 text-sm text-slate-400">Enter a match number to pick teams.</p>
                   ) : unscoutedTeams.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-emerald-300">All teams are already pit scouted.</p>
                   ) : filteredUnscoutedTeams.length === 0 ? (
@@ -367,7 +427,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
           )}
           {hasExistingRecord && data.teamNumber && (
             <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              Existing pit scouting data was found for this team and loaded for editing.
+              Existing pit scouting data was found for this team/match and loaded for editing.
             </p>
           )}
         </div>
@@ -602,7 +662,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
       <div className="flex justify-end pt-4">
         <button
           onClick={handleSave}
-          disabled={!activeProfile?.id || !data.teamNumber}
+          disabled={!activeProfile?.id || !data.teamNumber || !toValidMatchNumber(data.matchNumber)}
           className="flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-300 disabled:shadow-none text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-600/20 w-full sm:w-auto justify-center text-lg disabled:cursor-not-allowed"
         >
           <Save className="w-6 h-6" />
