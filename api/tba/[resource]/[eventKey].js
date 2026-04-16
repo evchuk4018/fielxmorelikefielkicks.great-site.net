@@ -101,8 +101,8 @@ const HARDCODED_TEAMS_BY_EVENT = {
 };
 
 function createHardcodedTeamRows(eventKey) {
-  const rows = HARDCODED_TEAMS_BY_EVENT[eventKey] ?? null;
-  if (!Array.isArray(rows)) {
+  const rows = HARDCODED_TEAMS_BY_EVENT[eventKey];
+  if (!rows) {
     return null;
   }
 
@@ -110,6 +110,7 @@ function createHardcodedTeamRows(eventKey) {
     key: `frc${row.team_number}`,
     team_number: row.team_number,
     nickname: row.nickname,
+    // TBA clients commonly expect both fields; source list only provides one display name.
     name: row.nickname,
     city: row.city,
     state_prov: row.state_prov,
