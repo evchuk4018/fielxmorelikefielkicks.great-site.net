@@ -250,7 +250,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     if (!toValidMatchNumber(data.matchNumber)) {
-      showToast('Please enter a match number before saving pit scouting');
+      showToast('Please enter a valid match number (positive integer) before saving pit scouting');
       return;
     }
     // Data is already auto-saved to storage on every change.
@@ -374,7 +374,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
               <span className={selectedTeam ? 'font-mono text-xl' : 'text-slate-400'}>
                 {selectedTeam
                   ? `${selectedTeam.team_number} - ${selectedTeam.nickname || selectedTeam.name || 'Unknown team'}`
-                  : data.matchNumber
+                  : toValidMatchNumber(data.matchNumber)
                     ? 'Select an unscouted team for this match'
                     : 'Enter match number first'}
               </span>

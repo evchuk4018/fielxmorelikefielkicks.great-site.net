@@ -75,7 +75,17 @@ export function useInitialAppLoad(params: UseInitialAppLoadParams) {
           const localTeams = getProfileTeams(loadedActiveProfile.id);
           const statboticsTeams = await statbotics.fetchEventTeams(loadedActiveProfile.eventKey);
           const mergedTeams = mergeEventTeams(localTeams, statboticsTeams || []);
-          if (mergedTeams.length > localTeams.length) {
+          const teamsChanged =
+            mergedTeams.length !== localTeams.length ||
+            mergedTeams.some((team, index) => {
+              const previous = localTeams[index];
+              return !previous
+                || previous.team_number !== team.team_number
+                || previous.nickname !== team.nickname
+                || previous.name !== team.name;
+            });
+
+          if (teamsChanged) {
             await updateProfileTeams(loadedActiveProfile.id, mergedTeams);
             if (!isCancelled) {
               setProfiles(getProfiles());

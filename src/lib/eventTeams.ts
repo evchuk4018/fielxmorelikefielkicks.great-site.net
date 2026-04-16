@@ -30,7 +30,7 @@ export function mergeEventTeams(baseTeams: TBATeam[], statboticsRows: unknown): 
   const merged = new Map<number, TBATeam>();
 
   baseTeams.forEach((team) => {
-    if (!Number.isInteger(team?.team_number) || team.team_number <= 0) {
+    if (!Number.isInteger(team?.team_number) || team?.team_number <= 0) {
       return;
     }
 
