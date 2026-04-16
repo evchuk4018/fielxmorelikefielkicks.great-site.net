@@ -45,11 +45,6 @@ function hasPitRecordForEvent(record: SyncRecord<PitScoutData> | null, eventKey:
     return false;
   }
 
-  const teamNumber = Number(record.data.teamNumber);
-  if (!Number.isFinite(teamNumber) || teamNumber <= 0) {
-    return false;
-  }
-
   return normalizeEventKey(record.data.eventKey) === eventKey;
 }
 
@@ -84,7 +79,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
   const [hasExistingRecord, setHasExistingRecord] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const activeEventKey = useMemo(() => normalizeEventKey(activeProfile?.eventKey), [activeProfile?.eventKey]);
+  const activeEventKey = normalizeEventKey(activeProfile?.eventKey);
 
   useEffect(() => {
     // One-time destructive cleanup for legacy unscoped pit data.
