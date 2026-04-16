@@ -40,7 +40,7 @@ function normalizeEventKey(value: unknown): string {
   return value.trim().toLowerCase();
 }
 
-function hasPitRecordForEvent(record: SyncRecord<PitScoutData> | null, eventKey: string): record is SyncRecord<PitScoutData> {
+function isPitRecordForEvent(record: SyncRecord<PitScoutData> | null, eventKey: string): record is SyncRecord<PitScoutData> {
   if (!record?.data) {
     return false;
   }
@@ -79,7 +79,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
   const [hasExistingRecord, setHasExistingRecord] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const activeEventKey = normalizeEventKey(activeProfile?.eventKey);
+  const normalizedActiveEventKey = normalizeEventKey(activeProfile?.eventKey);
 
   useEffect(() => {
     // One-time destructive cleanup for legacy unscoped pit data.
@@ -121,14 +121,14 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
   }, [activeProfile?.id]);
 
   useEffect(() => {
-    if (!activeProfile?.id || !data.teamNumber || !activeEventKey) {
+    if (!activeProfile?.id || !data.teamNumber || !normalizedActiveEventKey) {
       setHasExistingRecord(false);
       return;
     }
 
     const scopedKey = getScopedPitKey(activeProfile.id, data.teamNumber);
     const saved = storage.get<SyncRecord<PitScoutData>>(scopedKey);
-    if (hasPitRecordForEvent(saved, activeEventKey)) {
+    if (isPitRecordForEvent(saved, normalizedActiveEventKey)) {
       setHasExistingRecord(true);
       setData({
         ...INITIAL_STATE,
@@ -141,10 +141,10 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     }
 
     setHasExistingRecord(false);
-  }, [activeEventKey, activeProfile?.id, data.teamNumber]);
+  }, [normalizedActiveEventKey, activeProfile?.id, data.teamNumber]);
 
   const scoutedTeamNumbers = useMemo(() => {
-    if (!activeProfile?.id || !activeEventKey) {
+    if (!activeProfile?.id || !normalizedActiveEventKey) {
       return new Set<number>();
     }
 
@@ -152,7 +152,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
     const scopedKeys = storage.getAllKeys().filter((key) => key.startsWith(scopedPrefix));
     return scopedKeys.reduce((acc, key) => {
       const record = storage.get<SyncRecord<PitScoutData>>(key);
-      if (!hasPitRecordForEvent(record, activeEventKey)) {
+      if (!isPitRecordForEvent(record, normalizedActiveEventKey)) {
         return acc;
       }
 
@@ -162,7 +162,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
       }
       return acc;
     }, new Set<number>());
-  }, [activeEventKey, activeProfile?.id, data]);
+  }, [normalizedActiveEventKey, activeProfile?.id, data]);
 
   const unscoutedTeams = useMemo(() => {
     return profileTeams
@@ -199,7 +199,7 @@ export function PitScouting({ activeProfile }: PitScoutingProps) {
 
     const scopedKey = getScopedPitKey(activeProfile.id, team.team_number);
     const saved = storage.get<SyncRecord<PitScoutData>>(scopedKey);
-    setHasExistingRecord(hasPitRecordForEvent(saved, activeEventKey));
+    setHasExistingRecord(isPitRecordForEvent(saved, normalizedActiveEventKey));
     setData({
       ...INITIAL_STATE,
       teamNumber: team.team_number,
