@@ -137,22 +137,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
       return [];
     }
 
-    return assignments.filter((assignment) => {
-      if (assignment.status === 'completed') {
-        return false;
-      }
-
-      const existingRecord = getMatchScoutStorageKeyCandidates({
-        matchNumber: assignment.matchNumber,
-        teamNumber: assignment.teamNumber,
-      })
-        .map((key) => storage.get<{ data?: MatchScoutData }>(key))
-        .find((record) => Boolean(record));
-
-      const existingEventKey = (existingRecord?.data?.eventKey || '').trim().toLowerCase();
-      const activeEventKey = activeProfile.eventKey.trim().toLowerCase();
-      return existingEventKey !== activeEventKey;
-    });
+    return assignments.filter((assignment) => assignment.status !== 'completed');
   }, [assignments, scoutProfileId, activeProfile]);
 
   const scoutModeEnabled = Boolean(scoutProfileId);
