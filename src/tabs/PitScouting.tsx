@@ -40,12 +40,12 @@ function normalizeEventKey(value: unknown): string {
   return value.trim().toLowerCase();
 }
 
-function isPitRecordForEvent(record: SyncRecord<PitScoutData> | null, eventKey: string): record is SyncRecord<PitScoutData> {
+function isPitRecordForEvent(record: SyncRecord<PitScoutData> | null, normalizedEventKey: string): record is SyncRecord<PitScoutData> {
   if (!record?.data) {
     return false;
   }
 
-  return normalizeEventKey(record.data.eventKey) === eventKey;
+  return normalizeEventKey(record.data.eventKey) === normalizeEventKey(normalizedEventKey);
 }
 
 const INITIAL_STATE: PitScoutData = {
