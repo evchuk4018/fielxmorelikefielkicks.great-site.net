@@ -283,6 +283,35 @@ function withinRange(value: number | null, minText: string, maxText: string): bo
   return true;
 }
 
+function calculateNonAutonEpa(row: AllianceBoardRow): number | null {
+  const teleop = row.epaTeleop;
+  const endgame = row.epaEndgame;
+
+  if (teleop === null && endgame === null) {
+    return null;
+  }
+
+  return (teleop ?? 0) + (endgame ?? 0);
+}
+
+function matchesNonAutonEpaMax(row: AllianceBoardRow, maxText: string): boolean {
+  if (!maxText.trim()) {
+    return true;
+  }
+
+  const max = Number(maxText);
+  if (!Number.isFinite(max)) {
+    return true;
+  }
+
+  const value = calculateNonAutonEpa(row);
+  if (value === null) {
+    return false;
+  }
+
+  return value <= max;
+}
+
 function matchesPitFilters(row: AllianceBoardRow, filters: PitFilterState): boolean {
   const notes = row.notes;
 
@@ -710,6 +739,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
   const [rankingMode, setRankingMode] = useState<RankingMode>('draft');
   const [expandedRawNotesTeams, setExpandedRawNotesTeams] = useState<Set<number>>(new Set());
   const [pitFilters, setPitFilters] = useState<PitFilterState>(INITIAL_PIT_FILTERS);
+  const [nonAutonEpaMax, setNonAutonEpaMax] = useState('');
 
   useEffect(() => {
     if (!pickedStorageKey) {
@@ -922,8 +952,9 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
     return rows
       .filter((row) => !pickedSet.has(row.teamNumber))
       .filter((row) => matchesPitFilters(row, pitFilters))
+      .filter((row) => matchesNonAutonEpaMax(row, nonAutonEpaMax))
       .sort((a, b) => compareByRankingMode(a, b, rankingMode));
-  }, [pickedSet, pitFilters, rankingMode, rows]);
+  }, [nonAutonEpaMax, pickedSet, pitFilters, rankingMode, rows]);
 
   const pickedRows = useMemo(() => {
     return rows
@@ -1259,7 +1290,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
-              Showing {availableRows.length} available teams after pit filters.
+              Showing {availableRows.length} available teams after filters.
             </p>
             <button
               type="button"
@@ -1295,17 +1326,29 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3">
             <p className="text-sm text-slate-300">Ranking mode</p>
-            <select
-              value={rankingMode}
-              onChange={(event) => setRankingMode(event.target.value as RankingMode)}
-              className="rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
-            >
-              <option value="draft">Draft Value</option>
-              <option value="combined_epa">Combined EPA (Total + Auto)</option>
-              <option value="total_epa">Total EPA</option>
-              <option value="auto_epa">Auto EPA</option>
-              <option value="tba_rank">TBA Rank</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                Non-Auto EPA Max
+                <input
+                  type="number"
+                  value={nonAutonEpaMax}
+                  onChange={(event) => setNonAutonEpaMax(event.target.value)}
+                  placeholder="Any"
+                  className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+                />
+              </label>
+              <select
+                value={rankingMode}
+                onChange={(event) => setRankingMode(event.target.value as RankingMode)}
+                className="rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="draft">Draft Value</option>
+                <option value="combined_epa">Combined EPA (Total + Auto)</option>
+                <option value="total_epa">Total EPA</option>
+                <option value="auto_epa">Auto EPA</option>
+                <option value="tba_rank">TBA Rank</option>
+              </select>
+            </div>
           </div>
 
           {availableRows.map((row, index) => {
