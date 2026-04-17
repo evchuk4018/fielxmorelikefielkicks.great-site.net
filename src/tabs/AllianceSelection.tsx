@@ -1328,21 +1328,23 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
             <p className="text-sm text-slate-300">Ranking mode</p>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="non-auto-epa-max"
-                  className="text-xs text-slate-400"
-                  title="Filters by teleop + endgame EPA at or below this value."
-                >
+                <label htmlFor="non-auto-epa-max" className="text-xs text-slate-400">
                   Non-Auto EPA Max
                 </label>
                 <input
                   id="non-auto-epa-max"
                   type="number"
+                  min="0"
+                  step="0.1"
                   value={nonAutoEpaMax}
                   onChange={(event) => setNonAutoEpaMax(event.target.value)}
                   placeholder="Any"
+                  aria-describedby="non-auto-epa-max-help"
                   className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
                 />
+                <span id="non-auto-epa-max-help" className="sr-only">
+                  Filters teams by teleop + endgame EPA at or below this value.
+                </span>
               </div>
               <select
                 value={rankingMode}
