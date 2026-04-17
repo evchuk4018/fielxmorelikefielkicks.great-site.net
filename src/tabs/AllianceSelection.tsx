@@ -261,7 +261,7 @@ function withinRange(value: number | null, minText: string, maxText: string): bo
   const max = maxText.trim() ? Number(maxText) : null;
 
   if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) {
-    return true;
+    return false;
   }
 
   if (min === null && max === null) {
