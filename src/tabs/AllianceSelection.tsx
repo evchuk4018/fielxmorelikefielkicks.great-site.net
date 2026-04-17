@@ -739,7 +739,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
   const [rankingMode, setRankingMode] = useState<RankingMode>('draft');
   const [expandedRawNotesTeams, setExpandedRawNotesTeams] = useState<Set<number>>(new Set());
   const [pitFilters, setPitFilters] = useState<PitFilterState>(INITIAL_PIT_FILTERS);
-  const [nonAutonEpaMax, setNonAutonEpaMax] = useState('');
+  const [nonAutoEpaMax, setNonAutoEpaMax] = useState('');
 
   useEffect(() => {
     if (!pickedStorageKey) {
@@ -952,9 +952,9 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
     return rows
       .filter((row) => !pickedSet.has(row.teamNumber))
       .filter((row) => matchesPitFilters(row, pitFilters))
-      .filter((row) => matchesNonAutoEpaMax(row, nonAutonEpaMax))
+      .filter((row) => matchesNonAutoEpaMax(row, nonAutoEpaMax))
       .sort((a, b) => compareByRankingMode(a, b, rankingMode));
-  }, [nonAutonEpaMax, pickedSet, pitFilters, rankingMode, rows]);
+  }, [nonAutoEpaMax, pickedSet, pitFilters, rankingMode, rows]);
 
   const pickedRows = useMemo(() => {
     return rows
@@ -1331,8 +1331,8 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
                 Non-Auto EPA Max
                 <input
                   type="number"
-                  value={nonAutonEpaMax}
-                  onChange={(event) => setNonAutonEpaMax(event.target.value)}
+                  value={nonAutoEpaMax}
+                  onChange={(event) => setNonAutoEpaMax(event.target.value)}
                   placeholder="Any"
                   className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
                 />
