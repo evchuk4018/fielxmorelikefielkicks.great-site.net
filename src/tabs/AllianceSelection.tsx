@@ -156,7 +156,7 @@ function summarizeMatchNoteLines(lines: MatchNoteLine[]): { aiNotes: Map<number,
   grouped.forEach((items, teamNumber) => {
     const sorted = [...items].sort((a, b) => b.updatedAt - a.updatedAt);
     const unique = new Set<string>();
-    const deduped = sorted
+    const dedupedNotes = sorted
       .map((item) => item.text)
       .filter((text) => {
         if (unique.has(text)) {
@@ -166,7 +166,7 @@ function summarizeMatchNoteLines(lines: MatchNoteLine[]): { aiNotes: Map<number,
         return true;
       });
 
-    aiSummary.set(teamNumber, deduped.slice(0, 3));
+    aiSummary.set(teamNumber, dedupedNotes.slice(0, 3));
     rawSummary.set(teamNumber, sorted.map((item) => item.text));
   });
 
@@ -391,30 +391,30 @@ function compareByDraftValue(a: AllianceBoardRow, b: AllianceBoardRow): number {
   return a.teamNumber - b.teamNumber;
 }
 
-function epaOrFallback(value: number | null, fallback: number): number {
+function getValueOrFallback(value: number | null, fallback: number): number {
   return value === null ? fallback : value;
 }
 
 function compareByRankingMode(a: AllianceBoardRow, b: AllianceBoardRow, rankingMode: RankingMode): number {
   if (rankingMode === 'combined_epa') {
-    const aCombined = epaOrFallback(a.epaTotal, -1) + epaOrFallback(a.epaAuto, -1);
-    const bCombined = epaOrFallback(b.epaTotal, -1) + epaOrFallback(b.epaAuto, -1);
+    const aCombined = getValueOrFallback(a.epaTotal, -1) + getValueOrFallback(a.epaAuto, -1);
+    const bCombined = getValueOrFallback(b.epaTotal, -1) + getValueOrFallback(b.epaAuto, -1);
     if (aCombined !== bCombined) {
       return bCombined - aCombined;
     }
   }
 
   if (rankingMode === 'auto_epa') {
-    const aAuto = epaOrFallback(a.epaAuto, -1);
-    const bAuto = epaOrFallback(b.epaAuto, -1);
+    const aAuto = getValueOrFallback(a.epaAuto, -1);
+    const bAuto = getValueOrFallback(b.epaAuto, -1);
     if (aAuto !== bAuto) {
       return bAuto - aAuto;
     }
   }
 
   if (rankingMode === 'total_epa') {
-    const aTotal = epaOrFallback(a.epaTotal, -1);
-    const bTotal = epaOrFallback(b.epaTotal, -1);
+    const aTotal = getValueOrFallback(a.epaTotal, -1);
+    const bTotal = getValueOrFallback(b.epaTotal, -1);
     if (aTotal !== bTotal) {
       return bTotal - aTotal;
     }
@@ -811,7 +811,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide">Auton</p>
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide">Autonomous</p>
                     <p className="text-sm text-slate-200 line-clamp-2">{row.notes.autoDescription || 'No pit auton details.'}</p>
                   </div>
                 </div>
