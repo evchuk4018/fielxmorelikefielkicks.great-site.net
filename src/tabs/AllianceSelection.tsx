@@ -18,8 +18,23 @@ type TeamNoteSummary = {
   rawMatchNotes: string[];
   noteCount: number;
   driveTrainType: string | null;
+  driveTrainOther: string | null;
+  driveMotors: string[];
+  canDriveOverBump: boolean | null;
   canDriveUnderTrench: boolean | null;
+  canClimbTower: boolean | null;
+  maxClimbLevel: string | null;
+  fuelHopperCapacity: number | null;
+  chassisWidth: number | null;
+  chassisLength: number | null;
+  intakePosition: string | null;
+  looksGood: string | null;
   autoDescription: string | null;
+  visionSetup: string | null;
+  shooterType: string | null;
+  hasTurret: boolean | null;
+  canPlayDefense: boolean | null;
+  defenseStyle: string | null;
 };
 
 type AllianceBoardRow = {
@@ -43,13 +58,89 @@ type PitSnapshot = {
   updatedAt: number;
   note: string | null;
   driveTrainType: string | null;
+  driveTrainOther: string | null;
+  driveMotors: string[];
+  canDriveOverBump: boolean | null;
   canDriveUnderTrench: boolean | null;
+  canClimbTower: boolean | null;
+  maxClimbLevel: string | null;
+  fuelHopperCapacity: number | null;
+  chassisWidth: number | null;
+  chassisLength: number | null;
+  intakePosition: string | null;
+  looksGood: string | null;
   autoDescription: string | null;
+  visionSetup: string | null;
+  shooterType: string | null;
+  hasTurret: boolean | null;
+  canPlayDefense: boolean | null;
+  defenseStyle: string | null;
 };
 
 type RankingMode = 'draft' | 'combined_epa' | 'auto_epa' | 'total_epa' | 'tba_rank';
+type BooleanFilter = 'any' | 'yes' | 'no';
+
+type PitFilterState = {
+  driveTrainType: string;
+  driveTrainOther: string;
+  driveMotor: string;
+  canDriveOverBump: BooleanFilter;
+  canDriveUnderTrench: BooleanFilter;
+  canClimbTower: BooleanFilter;
+  maxClimbLevel: string;
+  fuelHopperMin: string;
+  fuelHopperMax: string;
+  chassisWidthMin: string;
+  chassisWidthMax: string;
+  chassisLengthMin: string;
+  chassisLengthMax: string;
+  intakePosition: string;
+  looksGood: string;
+  autoDescription: string;
+  visionSetup: string;
+  shooterType: string;
+  hasTurret: BooleanFilter;
+  canPlayDefense: BooleanFilter;
+  defenseStyle: string;
+  notes: string;
+};
 
 const REFRESH_INTERVAL_MS = 45000;
+const BOOLEAN_FILTER_OPTIONS: Array<{ value: BooleanFilter; label: string }> = [
+  { value: 'any', label: 'Any' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+];
+const DRIVE_TRAIN_OPTIONS = ['Tank', 'Swerve', 'Mecanum', 'H-Drive', 'Other'];
+const DRIVE_MOTOR_OPTIONS = ['Falcon 500 / Kraken X60', 'NEO', 'NEO Vortex', 'CIM', 'MiniCIM', 'Other'];
+const CLIMB_LEVEL_OPTIONS = ['Level 1', 'Level 2', 'Level 3'];
+const INTAKE_POSITION_OPTIONS = ['Over the bumper', 'Under the bumper', 'Both'];
+const SHOOTER_TYPE_OPTIONS = ['Single shooter', 'Multi-shooter'];
+const LOOKS_GOOD_OPTIONS = ['Yes', 'No', 'Mid'];
+const INITIAL_PIT_FILTERS: PitFilterState = {
+  driveTrainType: '',
+  driveTrainOther: '',
+  driveMotor: '',
+  canDriveOverBump: 'any',
+  canDriveUnderTrench: 'any',
+  canClimbTower: 'any',
+  maxClimbLevel: '',
+  fuelHopperMin: '',
+  fuelHopperMax: '',
+  chassisWidthMin: '',
+  chassisWidthMax: '',
+  chassisLengthMin: '',
+  chassisLengthMax: '',
+  intakePosition: '',
+  looksGood: '',
+  autoDescription: '',
+  visionSetup: '',
+  shooterType: '',
+  hasTurret: 'any',
+  canPlayDefense: 'any',
+  defenseStyle: '',
+  notes: '',
+};
 
 function normalizeEventKey(value: string): string {
   return value.trim().toLowerCase();
@@ -113,6 +204,17 @@ function normalizeText(value: unknown): string {
   return value.trim();
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 function getPayloadEventKey(payload: unknown): string {
   if (!payload || typeof payload !== 'object') {
     return '';
@@ -120,6 +222,91 @@ function getPayloadEventKey(payload: unknown): string {
 
   const value = (payload as { eventKey?: unknown }).eventKey;
   return typeof value === 'string' ? normalizeEventKey(value) : '';
+}
+
+function matchesBooleanFilter(value: boolean | null, filter: BooleanFilter): boolean {
+  if (filter === 'any') {
+    return true;
+  }
+
+  if (value === null) {
+    return false;
+  }
+
+  return filter === 'yes' ? value : !value;
+}
+
+function containsMatch(value: string | null, needle: string): boolean {
+  if (!needle.trim()) {
+    return true;
+  }
+
+  if (!value) {
+    return false;
+  }
+
+  return value.toLowerCase().includes(needle.trim().toLowerCase());
+}
+
+function equalsMatch(value: string | null, selected: string): boolean {
+  if (!selected) {
+    return true;
+  }
+
+  return value === selected;
+}
+
+function withinRange(value: number | null, minText: string, maxText: string): boolean {
+  const min = minText.trim() ? Number(minText) : null;
+  const max = maxText.trim() ? Number(maxText) : null;
+
+  if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) {
+    return true;
+  }
+
+  if (min === null && max === null) {
+    return true;
+  }
+
+  if (value === null) {
+    return false;
+  }
+
+  if (min !== null && value < min) {
+    return false;
+  }
+
+  if (max !== null && value > max) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesPitFilters(row: AllianceBoardRow, filters: PitFilterState): boolean {
+  const notes = row.notes;
+
+  return (
+    equalsMatch(notes.driveTrainType, filters.driveTrainType)
+    && containsMatch(notes.driveTrainOther, filters.driveTrainOther)
+    && (!filters.driveMotor || notes.driveMotors.includes(filters.driveMotor))
+    && matchesBooleanFilter(notes.canDriveOverBump, filters.canDriveOverBump)
+    && matchesBooleanFilter(notes.canDriveUnderTrench, filters.canDriveUnderTrench)
+    && matchesBooleanFilter(notes.canClimbTower, filters.canClimbTower)
+    && equalsMatch(notes.maxClimbLevel, filters.maxClimbLevel)
+    && withinRange(notes.fuelHopperCapacity, filters.fuelHopperMin, filters.fuelHopperMax)
+    && withinRange(notes.chassisWidth, filters.chassisWidthMin, filters.chassisWidthMax)
+    && withinRange(notes.chassisLength, filters.chassisLengthMin, filters.chassisLengthMax)
+    && equalsMatch(notes.intakePosition, filters.intakePosition)
+    && equalsMatch(notes.looksGood, filters.looksGood)
+    && containsMatch(notes.autoDescription, filters.autoDescription)
+    && containsMatch(notes.visionSetup, filters.visionSetup)
+    && equalsMatch(notes.shooterType, filters.shooterType)
+    && matchesBooleanFilter(notes.hasTurret, filters.hasTurret)
+    && matchesBooleanFilter(notes.canPlayDefense, filters.canPlayDefense)
+    && containsMatch(notes.defenseStyle, filters.defenseStyle)
+    && containsMatch(notes.pitNote, filters.notes)
+  );
 }
 
 function buildPickedStorageKey(eventKey: string): string {
@@ -204,16 +391,46 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
 
     const note = normalizeText(payload?.notes) || null;
     const driveTrainType = normalizeText(payload?.driveTrainType) || null;
+    const driveTrainOther = normalizeText(payload?.driveTrainOther) || null;
+    const driveMotors = normalizeStringArray(payload?.driveMotors);
+    const canDriveOverBump = typeof payload?.canDriveOverBump === 'boolean' ? payload.canDriveOverBump : null;
     const autoDescription = normalizeText(payload?.autoDescription) || null;
+    const visionSetup = normalizeText(payload?.visionSetup) || null;
+    const shooterType = normalizeText(payload?.shooterType) || null;
+    const hasTurret = typeof payload?.hasTurret === 'boolean' ? payload.hasTurret : null;
+    const canPlayDefense = typeof payload?.canPlayDefense === 'boolean' ? payload.canPlayDefense : null;
+    const defenseStyle = normalizeText(payload?.defenseStyle) || null;
     const canDriveUnderTrench = typeof payload?.canDriveUnderTrench === 'boolean' ? payload.canDriveUnderTrench : null;
+    const canClimbTower = typeof payload?.canClimbTower === 'boolean' ? payload.canClimbTower : null;
+    const maxClimbLevel = normalizeText(payload?.maxClimbLevel) || null;
+    const fuelHopperCapacity = toFiniteNumber(payload?.fuelHopperCapacity);
+    const chassisWidth = toFiniteNumber(payload?.chassisWidth);
+    const chassisLength = toFiniteNumber(payload?.chassisLength);
+    const intakePosition = normalizeText(payload?.intakePosition) || null;
+    const looksGood = normalizeText(payload?.looksGood) || null;
     const existing = pitByTeam.get(teamNumber);
     if (!existing || record.timestamp >= existing.updatedAt) {
       pitByTeam.set(teamNumber, {
         updatedAt: record.timestamp,
         note,
         driveTrainType,
+        driveTrainOther,
+        driveMotors,
+        canDriveOverBump,
         canDriveUnderTrench,
+        canClimbTower,
+        maxClimbLevel,
+        fuelHopperCapacity,
+        chassisWidth,
+        chassisLength,
+        intakePosition,
+        looksGood,
         autoDescription,
+        visionSetup,
+        shooterType,
+        hasTurret,
+        canPlayDefense,
+        defenseStyle,
       });
     }
   });
@@ -271,8 +488,23 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
 
       const note = normalizeText(payload?.notes) || null;
       const driveTrainType = normalizeText(payload?.driveTrainType) || null;
+      const driveTrainOther = normalizeText(payload?.driveTrainOther) || null;
+      const driveMotors = normalizeStringArray(payload?.driveMotors);
+      const canDriveOverBump = typeof payload?.canDriveOverBump === 'boolean' ? payload.canDriveOverBump : null;
       const autoDescription = normalizeText(payload?.autoDescription) || null;
+      const visionSetup = normalizeText(payload?.visionSetup) || null;
+      const shooterType = normalizeText(payload?.shooterType) || null;
+      const hasTurret = typeof payload?.hasTurret === 'boolean' ? payload.hasTurret : null;
+      const canPlayDefense = typeof payload?.canPlayDefense === 'boolean' ? payload.canPlayDefense : null;
+      const defenseStyle = normalizeText(payload?.defenseStyle) || null;
       const canDriveUnderTrench = typeof payload?.canDriveUnderTrench === 'boolean' ? payload.canDriveUnderTrench : null;
+      const canClimbTower = typeof payload?.canClimbTower === 'boolean' ? payload.canClimbTower : null;
+      const maxClimbLevel = normalizeText(payload?.maxClimbLevel) || null;
+      const fuelHopperCapacity = toFiniteNumber(payload?.fuelHopperCapacity);
+      const chassisWidth = toFiniteNumber(payload?.chassisWidth);
+      const chassisLength = toFiniteNumber(payload?.chassisLength);
+      const intakePosition = normalizeText(payload?.intakePosition) || null;
+      const looksGood = normalizeText(payload?.looksGood) || null;
       const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
       const existing = pitByTeam.get(teamNumber);
       if (!existing || updatedAt >= existing.updatedAt) {
@@ -280,8 +512,23 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
           updatedAt,
           note,
           driveTrainType,
+          driveTrainOther,
+          driveMotors,
+          canDriveOverBump,
           canDriveUnderTrench,
+          canClimbTower,
+          maxClimbLevel,
+          fuelHopperCapacity,
+          chassisWidth,
+          chassisLength,
+          intakePosition,
+          looksGood,
           autoDescription,
+          visionSetup,
+          shooterType,
+          hasTurret,
+          canPlayDefense,
+          defenseStyle,
         });
       }
     });
@@ -335,8 +582,23 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
       rawMatchNotes: allMatchNotes,
       noteCount: (pit?.note ? 1 : 0) + allMatchNotes.length,
       driveTrainType: pit?.driveTrainType || null,
+      driveTrainOther: pit?.driveTrainOther || null,
+      driveMotors: pit?.driveMotors || [],
+      canDriveOverBump: pit?.canDriveOverBump ?? null,
       canDriveUnderTrench: pit?.canDriveUnderTrench ?? null,
+      canClimbTower: pit?.canClimbTower ?? null,
+      maxClimbLevel: pit?.maxClimbLevel || null,
+      fuelHopperCapacity: pit?.fuelHopperCapacity ?? null,
+      chassisWidth: pit?.chassisWidth ?? null,
+      chassisLength: pit?.chassisLength ?? null,
+      intakePosition: pit?.intakePosition || null,
+      looksGood: pit?.looksGood || null,
       autoDescription: pit?.autoDescription || null,
+      visionSetup: pit?.visionSetup || null,
+      shooterType: pit?.shooterType || null,
+      hasTurret: pit?.hasTurret ?? null,
+      canPlayDefense: pit?.canPlayDefense ?? null,
+      defenseStyle: pit?.defenseStyle || null,
     });
   });
 
@@ -447,6 +709,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
   const [refreshToken, setRefreshToken] = useState(0);
   const [rankingMode, setRankingMode] = useState<RankingMode>('draft');
   const [expandedRawNotesTeams, setExpandedRawNotesTeams] = useState<Set<number>>(new Set());
+  const [pitFilters, setPitFilters] = useState<PitFilterState>(INITIAL_PIT_FILTERS);
 
   useEffect(() => {
     if (!pickedStorageKey) {
@@ -565,8 +828,23 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
               rawMatchNotes: [],
               noteCount: 0,
               driveTrainType: null,
+              driveTrainOther: null,
+              driveMotors: [],
+              canDriveOverBump: null,
               canDriveUnderTrench: null,
+              canClimbTower: null,
+              maxClimbLevel: null,
+              fuelHopperCapacity: null,
+              chassisWidth: null,
+              chassisLength: null,
+              intakePosition: null,
+              looksGood: null,
               autoDescription: null,
+              visionSetup: null,
+              shooterType: null,
+              hasTurret: null,
+              canPlayDefense: null,
+              defenseStyle: null,
             };
 
             return {
@@ -643,8 +921,9 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
   const availableRows = useMemo(() => {
     return rows
       .filter((row) => !pickedSet.has(row.teamNumber))
+      .filter((row) => matchesPitFilters(row, pitFilters))
       .sort((a, b) => compareByRankingMode(a, b, rankingMode));
-  }, [pickedSet, rankingMode, rows]);
+  }, [pickedSet, pitFilters, rankingMode, rows]);
 
   const pickedRows = useMemo(() => {
     return rows
@@ -711,6 +990,286 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
             </p>
           </div>
         </div>
+
+        <details className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3" open>
+          <summary className="cursor-pointer text-sm font-medium text-slate-200">
+            Pit Scouting Filters (for 3rd-pick screening)
+          </summary>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Drive Train Type</span>
+              <select
+                value={pitFilters.driveTrainType}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, driveTrainType: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {DRIVE_TRAIN_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Drive Train Other (contains)</span>
+              <input
+                type="text"
+                value={pitFilters.driveTrainOther}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, driveTrainOther: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Drive Motor Includes</span>
+              <select
+                value={pitFilters.driveMotor}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, driveMotor: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {DRIVE_MOTOR_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Can Drive Over Bump</span>
+              <select
+                value={pitFilters.canDriveOverBump}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, canDriveOverBump: event.target.value as BooleanFilter }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Can Drive Under Trench</span>
+              <select
+                value={pitFilters.canDriveUnderTrench}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, canDriveUnderTrench: event.target.value as BooleanFilter }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Can Climb Tower</span>
+              <select
+                value={pitFilters.canClimbTower}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, canClimbTower: event.target.value as BooleanFilter }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Maximum Climb Level</span>
+              <select
+                value={pitFilters.maxClimbLevel}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, maxClimbLevel: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {CLIMB_LEVEL_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Fuel Hopper Min</span>
+              <input
+                type="number"
+                value={pitFilters.fuelHopperMin}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, fuelHopperMin: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Fuel Hopper Max</span>
+              <input
+                type="number"
+                value={pitFilters.fuelHopperMax}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, fuelHopperMax: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Chassis Width Min (in)</span>
+              <input
+                type="number"
+                value={pitFilters.chassisWidthMin}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, chassisWidthMin: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Chassis Width Max (in)</span>
+              <input
+                type="number"
+                value={pitFilters.chassisWidthMax}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, chassisWidthMax: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Chassis Length Min (in)</span>
+              <input
+                type="number"
+                value={pitFilters.chassisLengthMin}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, chassisLengthMin: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Chassis Length Max (in)</span>
+              <input
+                type="number"
+                value={pitFilters.chassisLengthMax}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, chassisLengthMax: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Intake Position</span>
+              <select
+                value={pitFilters.intakePosition}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, intakePosition: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {INTAKE_POSITION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Shooter Type</span>
+              <select
+                value={pitFilters.shooterType}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, shooterType: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {SHOOTER_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Has Turret</span>
+              <select
+                value={pitFilters.hasTurret}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, hasTurret: event.target.value as BooleanFilter }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Can Play Defense</span>
+              <select
+                value={pitFilters.canPlayDefense}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, canPlayDefense: event.target.value as BooleanFilter }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Looks Good</span>
+              <select
+                value={pitFilters.looksGood}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, looksGood: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              >
+                <option value="">Any</option>
+                {LOOKS_GOOD_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Autonomous Description (contains)</span>
+              <input
+                type="text"
+                value={pitFilters.autoDescription}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, autoDescription: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Vision Setup (contains)</span>
+              <input
+                type="text"
+                value={pitFilters.visionSetup}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, visionSetup: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs text-slate-400">Defense Style (contains)</span>
+              <input
+                type="text"
+                value={pitFilters.defenseStyle}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, defenseStyle: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-xs text-slate-400">Pit Additional Notes (contains)</span>
+              <input
+                type="text"
+                value={pitFilters.notes}
+                onChange={(event) => setPitFilters((previous) => ({ ...previous, notes: event.target.value }))}
+                className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">
+              Showing {availableRows.length} available teams after pit filters.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPitFilters(INITIAL_PIT_FILTERS)}
+              className="rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            >
+              Clear Pit Filters
+            </button>
+          </div>
+        </details>
       </div>
 
       {isLoading && (
