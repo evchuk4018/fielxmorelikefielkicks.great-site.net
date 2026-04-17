@@ -1328,7 +1328,11 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
             <p className="text-sm text-slate-300">Ranking mode</p>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex flex-col gap-1">
-                <label htmlFor="non-auto-epa-max" className="text-xs text-slate-400">
+                <label
+                  htmlFor="non-auto-epa-max"
+                  className="text-xs text-slate-400"
+                  title="Filters by teleop + endgame EPA at or below this value."
+                >
                   Non-Auto EPA Max
                 </label>
                 <input
