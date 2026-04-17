@@ -283,7 +283,7 @@ function withinRange(value: number | null, minText: string, maxText: string): bo
   return true;
 }
 
-function calculateNonAutonEpa(row: AllianceBoardRow): number | null {
+function calculateNonAutoEpa(row: AllianceBoardRow): number | null {
   const teleop = row.epaTeleop;
   const endgame = row.epaEndgame;
 
@@ -294,7 +294,7 @@ function calculateNonAutonEpa(row: AllianceBoardRow): number | null {
   return (teleop ?? 0) + (endgame ?? 0);
 }
 
-function matchesNonAutonEpaMax(row: AllianceBoardRow, maxText: string): boolean {
+function matchesNonAutoEpaMax(row: AllianceBoardRow, maxText: string): boolean {
   if (!maxText.trim()) {
     return true;
   }
@@ -304,7 +304,7 @@ function matchesNonAutonEpaMax(row: AllianceBoardRow, maxText: string): boolean 
     return true;
   }
 
-  const value = calculateNonAutonEpa(row);
+  const value = calculateNonAutoEpa(row);
   if (value === null) {
     return false;
   }
@@ -952,7 +952,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
     return rows
       .filter((row) => !pickedSet.has(row.teamNumber))
       .filter((row) => matchesPitFilters(row, pitFilters))
-      .filter((row) => matchesNonAutonEpaMax(row, nonAutonEpaMax))
+      .filter((row) => matchesNonAutoEpaMax(row, nonAutonEpaMax))
       .sort((a, b) => compareByRankingMode(a, b, rankingMode));
   }, [nonAutonEpaMax, pickedSet, pitFilters, rankingMode, rows]);
 
