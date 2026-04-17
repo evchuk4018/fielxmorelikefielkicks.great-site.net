@@ -1327,16 +1327,19 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3">
             <p className="text-sm text-slate-300">Ranking mode</p>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex flex-col gap-1 text-xs text-slate-400">
-                Non-Auto EPA Max
+              <div className="flex flex-col gap-1">
+                <label htmlFor="non-auto-epa-max" className="text-xs text-slate-400">
+                  Non-Auto EPA Max
+                </label>
                 <input
+                  id="non-auto-epa-max"
                   type="number"
                   value={nonAutoEpaMax}
                   onChange={(event) => setNonAutoEpaMax(event.target.value)}
                   placeholder="Any"
                   className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
                 />
-              </label>
+              </div>
               <select
                 value={rankingMode}
                 onChange={(event) => setRankingMode(event.target.value as RankingMode)}
