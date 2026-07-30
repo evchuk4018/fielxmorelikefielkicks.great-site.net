@@ -17,6 +17,7 @@ import { useRouteGuards } from './app/hooks/useRouteGuards';
 import { useUserProfilePolling } from './app/hooks/useUserProfilePolling';
 import { GLOBAL_MATCH_DATA_ADMIN_IDS, SCOUT_DEFAULT_EVENT_KEY } from './app/constants';
 import { PrescoutingQuickScoutTarget, setPendingPrescoutingQuickScout } from './prescouting/quickScout';
+import { FieldMapProvider } from './app/context/FieldMapContext';
 const GLOBAL_MATCH_DATA_ADMIN_ID_SET = new Set<string>(GLOBAL_MATCH_DATA_ADMIN_IDS);
 
 export default function App() {
@@ -268,82 +269,85 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-blue-500/30">
-      {!signedInUserProfile && !isLoadingProfiles ? (
-        <AuthenticationGate
-          authMode={authMode}
-          setAuthMode={setAuthMode}
-          authRole={authRole}
-          setAuthRole={setAuthRole}
-          authName={authName}
-          setAuthName={setAuthName}
-          authPassword={authPassword}
-          setAuthPassword={setAuthPassword}
-          authPin={authPin}
-          setAuthPin={setAuthPin}
-          selectedLoginProfileId={selectedLoginProfileId}
-          setSelectedLoginProfileId={setSelectedLoginProfileId}
-          loginProfiles={loginProfiles}
-          selectedLoginProfile={selectedLoginProfile}
-          onLoginSubmit={handleLoginSubmit}
-          onSignupSubmit={handleSignupSubmit}
-        />
-      ) : (
-        <>
-          <EventNavigation
-            location={location}
-            activeProfile={activeProfile}
-            activeTab={activeTab}
-            isAdminSignedIn={isAdminSignedIn}
-            signedInUserProfile={signedInUserProfile}
-            onSetActiveTab={setActiveTab}
-            onSignOut={() => {
-              void handleSignOutUserProfile();
-            }}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onGoHome={handleGoHome}
+    <FieldMapProvider isAdminSignedIn={isAdminSignedIn}>
+      <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-blue-500/30">
+        {!signedInUserProfile && !isLoadingProfiles ? (
+          <AuthenticationGate
+            authMode={authMode}
+            setAuthMode={setAuthMode}
+            authRole={authRole}
+            setAuthRole={setAuthRole}
+            authName={authName}
+            setAuthName={setAuthName}
+            authPassword={authPassword}
+            setAuthPassword={setAuthPassword}
+            authPin={authPin}
+            setAuthPin={setAuthPin}
+            selectedLoginProfileId={selectedLoginProfileId}
+            setSelectedLoginProfileId={setSelectedLoginProfileId}
+            loginProfiles={loginProfiles}
+            selectedLoginProfile={selectedLoginProfile}
+            onLoginSubmit={handleLoginSubmit}
+            onSignupSubmit={handleSignupSubmit}
           />
-
-          <main className="p-4 sm:p-6 lg:p-8">
-            <PageContent
-              isLoadingProfiles={isLoadingProfiles}
-              signedInUserProfile={signedInUserProfile}
+        ) : (
+          <>
+            <EventNavigation
               location={location}
-              isAdminSignedIn={isAdminSignedIn}
-              canAccessGlobalMatchData={canAccessGlobalMatchData}
-              isScoutSignedIn={isScoutSignedIn}
-              activeTab={activeTab}
-              profiles={profiles}
               activeProfile={activeProfile}
-              isCreatingProfile={isCreatingProfile}
-              userProfiles={userProfiles}
-              onCreateProfile={handleCreateProfile}
-              onSelectProfile={handleSelectProfile}
-              onBanScout={handleBanScout}
-              onUnbanScout={handleUnbanScout}
-              onOpenPrescouting={handleOpenPrescouting}
-              onOpenGlobalMatchData={handleOpenGlobalMatchData}
-              onPrescoutingQuickScout={handlePrescoutingQuickScout}
+              activeTab={activeTab}
+              isAdminSignedIn={isAdminSignedIn}
+              signedInUserProfile={signedInUserProfile}
+              onSetActiveTab={setActiveTab}
+              onSignOut={() => {
+                void handleSignOutUserProfile();
+              }}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onGoHome={handleGoHome}
             />
-          </main>
 
-          <SettingsModal
-            isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
-            activeProfile={activeProfile}
-            onBackToEvents={handleGoHome}
-            onSignOutUserProfile={() => {
-              void handleSignOutUserProfile();
-            }}
-            signedInUserProfile={
-              signedInUserProfile
-                ? { name: signedInUserProfile.name, authType: signedInUserProfile.authType }
-                : null
-            }
-          />
-        </>
-      )}
-      <ToastProvider />
-    </div>
+            <main className="p-4 sm:p-6 lg:p-8">
+              <PageContent
+                isLoadingProfiles={isLoadingProfiles}
+                signedInUserProfile={signedInUserProfile}
+                location={location}
+                isAdminSignedIn={isAdminSignedIn}
+                canAccessGlobalMatchData={canAccessGlobalMatchData}
+                isScoutSignedIn={isScoutSignedIn}
+                activeTab={activeTab}
+                profiles={profiles}
+                activeProfile={activeProfile}
+                isCreatingProfile={isCreatingProfile}
+                userProfiles={userProfiles}
+                onCreateProfile={handleCreateProfile}
+                onSelectProfile={handleSelectProfile}
+                onBanScout={handleBanScout}
+                onUnbanScout={handleUnbanScout}
+                onOpenPrescouting={handleOpenPrescouting}
+                onOpenGlobalMatchData={handleOpenGlobalMatchData}
+                onPrescoutingQuickScout={handlePrescoutingQuickScout}
+              />
+            </main>
+
+            <SettingsModal
+              isOpen={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
+              activeProfile={activeProfile}
+              isAdminSignedIn={isAdminSignedIn}
+              onBackToEvents={handleGoHome}
+              onSignOutUserProfile={() => {
+                void handleSignOutUserProfile();
+              }}
+              signedInUserProfile={
+                signedInUserProfile
+                  ? { name: signedInUserProfile.name, authType: signedInUserProfile.authType }
+                  : null
+              }
+            />
+          </>
+        )}
+        <ToastProvider />
+      </div>
+    </FieldMapProvider>
   );
 }

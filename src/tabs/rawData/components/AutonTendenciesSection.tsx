@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { FieldHeatmap } from '../../../components/FieldHeatmap';
 import {
   AUTON_FIELD_HEIGHT,
-  AUTON_FIELD_OVERLAY_SRC,
   AUTON_FIELD_WIDTH,
   STRIP_ORDER,
 } from '../constants';
@@ -114,7 +113,6 @@ export const AutonTendenciesSection = React.memo(function AutonTendenciesSection
           runs={overlayRuns}
           width={AUTON_FIELD_WIDTH}
           height={AUTON_FIELD_HEIGHT}
-          overlaySrc={AUTON_FIELD_OVERLAY_SRC}
           showHorizontalThirds
           emptyMessage="No autonomous paths captured for the selected strip filters yet."
         />
@@ -139,7 +137,6 @@ export const AutonTendenciesSection = React.memo(function AutonTendenciesSection
               totalShots={summary.totalShots}
               width={AUTON_FIELD_WIDTH}
               height={AUTON_FIELD_HEIGHT}
-              overlaySrc={AUTON_FIELD_OVERLAY_SRC}
               color="#f43f5e"
               showHorizontalThirds
               emptyMessage="No autonomous shots captured from this start strip yet."

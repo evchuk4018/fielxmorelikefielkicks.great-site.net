@@ -1,4 +1,5 @@
 import React from 'react';
+import { useFieldMap } from '../app/context/FieldMapContext';
 
 type FieldHeatmapProps = {
   points: Array<{ x: number; y: number }>;
@@ -127,7 +128,7 @@ export const FieldHeatmap = React.memo(function FieldHeatmap({
   points,
   totalShots,
   color = '#f43f5e',
-  overlaySrc = '/auton-field-overlay.svg',
+  overlaySrc,
   width = 1000,
   height = 540,
   showHorizontalThirds = false,
@@ -135,6 +136,8 @@ export const FieldHeatmap = React.memo(function FieldHeatmap({
   pointRadius = 36,
 }: FieldHeatmapProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const { imageSrc } = useFieldMap();
+  const resolvedOverlaySrc = overlaySrc || imageSrc;
 
   const normalizedPoints = React.useMemo(() => {
     return points.map((point) => {
@@ -237,7 +240,7 @@ export const FieldHeatmap = React.memo(function FieldHeatmap({
         />
 
         <img
-          src={overlaySrc}
+          src={resolvedOverlaySrc}
           alt="Field overlay"
           className="pointer-events-none absolute inset-0 h-full w-full object-fill opacity-65"
         />

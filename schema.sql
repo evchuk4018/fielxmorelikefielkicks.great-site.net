@@ -211,6 +211,14 @@ create table if not exists public.admin_user_state (
   active_user_profile_id text references public.admin_user_profiles(id) on delete set null
 );
 
+create table if not exists public.field_map_settings (
+  id text primary key check (id = 'default'),
+  image_url text,
+  storage_path text,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 alter table public.match_scouts
 add column if not exists previous_team_ranking text;
 
@@ -241,6 +249,7 @@ create index if not exists idx_scout_assignments_scout_profile_id on public.scou
 create index if not exists idx_prescouting_team_claims_season_team on public.prescouting_team_claims (season_year, team_number);
 create index if not exists idx_prescouting_team_claims_claimer_profile_id on public.prescouting_team_claims (claimer_profile_id);
 create index if not exists idx_prescouting_team_claims_updated_at on public.prescouting_team_claims (updated_at desc);
+create index if not exists idx_field_map_settings_updated_at on public.field_map_settings (updated_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -288,6 +297,12 @@ before update on public.prescouting_team_claims
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_field_map_settings_updated_at on public.field_map_settings;
+create trigger set_field_map_settings_updated_at
+before update on public.field_map_settings
+for each row
+execute function public.set_updated_at();
+
 alter table public.pit_scouts enable row level security;
 alter table public.match_scouts enable row level security;
 alter table public.face_id_enrollments enable row level security;
@@ -296,6 +311,7 @@ alter table public.admin_user_profiles enable row level security;
 alter table public.admin_user_state enable row level security;
 alter table public.scout_assignments enable row level security;
 alter table public.prescouting_team_claims enable row level security;
+alter table public.field_map_settings enable row level security;
 
 -- Remove any previously-created admin_user_profiles policies (including legacy recursive ones)
 -- so policy state is deterministic across environments before recreating known-safe policies.
@@ -359,6 +375,14 @@ with check (true);
 drop policy if exists "service_role_full_admin_user_state" on public.admin_user_state;
 create policy "service_role_full_admin_user_state"
 on public.admin_user_state
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists "service_role_full_field_map_settings" on public.field_map_settings;
+create policy "service_role_full_field_map_settings"
+on public.field_map_settings
 for all
 to service_role
 using (true)
@@ -484,6 +508,22 @@ to anon
 using (true)
 with check (true);
 
+drop policy if exists "authenticated_rw_field_map_settings" on public.field_map_settings;
+create policy "authenticated_rw_field_map_settings"
+on public.field_map_settings
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_field_map_settings" on public.field_map_settings;
+create policy "anon_rw_field_map_settings"
+on public.field_map_settings
+for all
+to anon
+using (true)
+with check (true);
+
 drop policy if exists "authenticated_rw_scout_assignments" on public.scout_assignments;
 create policy "authenticated_rw_scout_assignments"
 on public.scout_assignments
@@ -538,6 +578,20 @@ values (
   true,
   8388608,
   array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id)
+do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'field-maps',
+  'field-maps',
+  true,
+  8388608,
+  array['image/*']
 )
 on conflict (id)
 do update set
@@ -614,6 +668,41 @@ on storage.objects
 for delete
 to authenticated
 using (bucket_id = 'face-id-snapshots');
+
+drop policy if exists "public_read_field_maps" on storage.objects;
+create policy "public_read_field_maps"
+on storage.objects
+for select
+to public
+using (bucket_id = 'field-maps');
+
+drop policy if exists "anon_insert_field_maps" on storage.objects;
+create policy "anon_insert_field_maps"
+on storage.objects
+for insert
+to anon
+with check (bucket_id = 'field-maps');
+
+drop policy if exists "authenticated_insert_field_maps" on storage.objects;
+create policy "authenticated_insert_field_maps"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id = 'field-maps');
+
+drop policy if exists "anon_delete_field_maps" on storage.objects;
+create policy "anon_delete_field_maps"
+on storage.objects
+for delete
+to anon
+using (bucket_id = 'field-maps');
+
+drop policy if exists "authenticated_delete_field_maps" on storage.objects;
+create policy "authenticated_delete_field_maps"
+on storage.objects
+for delete
+to authenticated
+using (bucket_id = 'field-maps');
 
 -- Purge legacy unscoped pit photos under pit/{teamNumber}/...
 begin;

@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { CompetitionProfile } from '../types';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useFieldMap } from '../app/context/FieldMapContext';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeProfile: CompetitionProfile | null;
+  isAdminSignedIn: boolean;
   onBackToEvents: () => void;
   onSignOutUserProfile: () => void;
   signedInUserProfile: { name: string; authType: 'password' | 'faceid' | 'pin' } | null;
@@ -17,17 +19,32 @@ export function SettingsModal({
   isOpen,
   onClose,
   activeProfile,
+  isAdminSignedIn,
   onBackToEvents,
   onSignOutUserProfile,
   signedInUserProfile,
 }: SettingsModalProps) {
   const [activeEventKey, setActiveEventKey] = useState('');
+  const [selectedMapFile, setSelectedMapFile] = useState<File | null>(null);
+  const { imageSrc, isLoading: isFieldMapLoading, isUploading, error: fieldMapError, uploadImage } = useFieldMap();
 
   useEffect(() => {
     if (isOpen) {
       setActiveEventKey(activeProfile?.eventKey || 'No active profile');
+      setSelectedMapFile(null);
     }
   }, [activeProfile?.eventKey, isOpen]);
+
+  const handleMapUpload = async () => {
+    if (!selectedMapFile) {
+      return;
+    }
+
+    const uploaded = await uploadImage(selectedMapFile);
+    if (uploaded) {
+      setSelectedMapFile(null);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -67,6 +84,53 @@ export function SettingsModal({
                   <p>{activeProfile.teamCount} teams cached</p>
                 </div>
               )}
+
+              <div className="space-y-3 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
+                <div>
+                  <p className="text-sm font-semibold text-white">Field Map</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    This image is shared across the app and used by all autonomous and shot maps.
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-950/70">
+                  <img src={imageSrc} alt="Current field map" className="h-32 w-full object-fill" />
+                </div>
+
+                {isAdminSignedIn ? (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setSelectedMapFile(event.target.files?.[0] || null)}
+                      disabled={isUploading}
+                      className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-100 hover:file:bg-slate-600 disabled:opacity-60"
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 text-xs text-slate-400 truncate">
+                        {isFieldMapLoading
+                          ? 'Loading saved map...'
+                          : selectedMapFile
+                            ? `${selectedMapFile.name} (${Math.ceil(selectedMapFile.size / 1024)} KB)`
+                            : 'Choose an image up to 8 MiB.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleMapUpload();
+                        }}
+                        disabled={!selectedMapFile || isUploading}
+                        className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {isUploading ? 'Uploading...' : 'Upload Map'}
+                      </button>
+                    </div>
+                    {fieldMapError && <p className="text-xs text-rose-300">{fieldMapError}</p>}
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-400">Only admins can change the shared field map.</p>
+                )}
+              </div>
 
               <div className="space-y-2 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
                 <p className="text-sm font-semibold text-white">Signed-in User</p>

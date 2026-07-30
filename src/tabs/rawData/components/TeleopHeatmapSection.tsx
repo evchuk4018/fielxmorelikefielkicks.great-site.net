@@ -2,7 +2,6 @@ import React from 'react';
 import { FieldHeatmap } from '../../../components/FieldHeatmap';
 import {
   AUTON_FIELD_HEIGHT,
-  AUTON_FIELD_OVERLAY_SRC,
   AUTON_FIELD_WIDTH,
 } from '../constants';
 import { TeleopSummary } from '../types';
@@ -30,7 +29,6 @@ export const TeleopHeatmapSection = React.memo(function TeleopHeatmapSection({
           totalShots={selectedTeamTeleopSummary.totalShots}
           width={AUTON_FIELD_WIDTH}
           height={AUTON_FIELD_HEIGHT}
-          overlaySrc={AUTON_FIELD_OVERLAY_SRC}
           color="#22c55e"
           pointRadius={42}
           emptyMessage="No teleop shot taps captured for this team yet."

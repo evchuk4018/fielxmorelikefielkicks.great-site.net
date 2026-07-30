@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
+import { useFieldMap } from '../../../app/context/FieldMapContext';
 import {
   AUTON_FIELD_HEIGHT,
-  AUTON_FIELD_OVERLAY_SRC,
   AUTON_FIELD_WIDTH,
 } from '../constants';
 import { NormalizedPoint, StripKey } from '../types';
@@ -85,10 +85,12 @@ export const AutonPathOverlayMap = React.memo(function AutonPathOverlayMap({
   runs,
   width = AUTON_FIELD_WIDTH,
   height = AUTON_FIELD_HEIGHT,
-  overlaySrc = AUTON_FIELD_OVERLAY_SRC,
+  overlaySrc,
   showHorizontalThirds = true,
   emptyMessage = 'No autonomous paths captured for the selected strip filters.',
 }: AutonPathOverlayMapProps) {
+  const { imageSrc } = useFieldMap();
+  const resolvedOverlaySrc = overlaySrc || imageSrc;
   const runCount = runs.length;
   const lineOpacity = resolveLineOpacity(runCount);
   const strokeWidth = resolveStrokeWidth(runCount);
@@ -110,7 +112,7 @@ export const AutonPathOverlayMap = React.memo(function AutonPathOverlayMap({
         style={{ aspectRatio: `${width} / ${height}` }}
       >
         <img
-          src={overlaySrc}
+          src={resolvedOverlaySrc}
           alt="Field overlay"
           className="pointer-events-none absolute inset-0 h-full w-full object-fill opacity-65"
         />

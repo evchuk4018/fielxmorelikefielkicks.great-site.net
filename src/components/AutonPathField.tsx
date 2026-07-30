@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AllianceColor, AutonPathData, AutonShotAttempt, AutonTrajectoryPoint } from '../types';
+import { useFieldMap } from '../app/context/FieldMapContext';
 
 type Point = { x: number; y: number };
 type RecorderPhase = 'setup' | 'recording' | 'annotate' | 'teleop';
@@ -21,7 +22,6 @@ const FIELD_HEIGHT = 540;
 const RECORD_SAMPLE_MS = 45;
 const PLAYBACK_STEP_MS = 40;
 const TELEOP_DURATION_MS = 140000;
-const FIELD_OVERLAY_SRC = '/auton-field-overlay.svg';
 const RED_START_LINE_X = 0.31;
 const BLUE_START_LINE_X = 0.69;
 
@@ -141,6 +141,7 @@ export function AutonPathField({
   durationMs = 20000,
   instanceId,
 }: Props) {
+  const { imageSrc } = useFieldMap();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const startEpochRef = useRef<number | null>(null);
   const teleopStartEpochRef = useRef<number | null>(null);
@@ -803,7 +804,7 @@ export function AutonPathField({
           onPointerUp={handlePointerUp}
         >
           <g transform={isViewRotated ? `translate(${FIELD_WIDTH} ${FIELD_HEIGHT}) rotate(180)` : undefined}>
-            <image href={FIELD_OVERLAY_SRC} x="0" y="0" width={FIELD_WIDTH} height={FIELD_HEIGHT} preserveAspectRatio="none" />
+            <image href={imageSrc} x="0" y="0" width={FIELD_WIDTH} height={FIELD_HEIGHT} preserveAspectRatio="none" />
 
             {phase !== 'teleop' && allianceColor === 'Red' && (
               <rect x="0" y="0" width={FIELD_WIDTH * RED_START_LINE_X} height={FIELD_HEIGHT} fill="#dc2626" opacity="0.12" />

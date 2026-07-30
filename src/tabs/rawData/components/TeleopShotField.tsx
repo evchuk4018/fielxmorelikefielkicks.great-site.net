@@ -1,5 +1,6 @@
 import React from 'react';
-import { AUTON_FIELD_HEIGHT, AUTON_FIELD_OVERLAY_SRC, AUTON_FIELD_WIDTH } from '../constants';
+import { useFieldMap } from '../../../app/context/FieldMapContext';
+import { AUTON_FIELD_HEIGHT, AUTON_FIELD_WIDTH } from '../constants';
 import { RawMatchPoint } from '../types';
 
 type TeleopShotFieldProps = {
@@ -27,6 +28,7 @@ export const TeleopShotField = React.memo(function TeleopShotField({
   points,
   emptyMessage = 'No teleop shots captured for this match.',
 }: TeleopShotFieldProps) {
+  const { imageSrc } = useFieldMap();
   const hasPoints = points.length > 0;
 
   return (
@@ -36,7 +38,7 @@ export const TeleopShotField = React.memo(function TeleopShotField({
         className="w-full rounded-lg border border-slate-700 bg-slate-950/70"
       >
         <image
-          href={AUTON_FIELD_OVERLAY_SRC}
+          href={imageSrc}
           x="0"
           y="0"
           width={AUTON_FIELD_WIDTH}
