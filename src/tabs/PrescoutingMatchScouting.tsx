@@ -5,8 +5,9 @@ import { compLevelSortOrder, formatMatchLabel, toTeamNumber } from '../lib/match
 import { buildMatchScoutStorageKey, getMatchScoutStorageKeyCandidates, storage } from '../lib/storage';
 import { listActivePrescoutingTeamClaims } from '../lib/supabase';
 import { MatchScoutData, PrescoutingTeamClaim, TBAMatch } from '../types';
-import { PRESCOUTING_SEASON_YEAR, PRESCOUTING_TEAMS } from '../prescouting/constants';
+import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
 import { usePrescoutingTeamMatches } from '../prescouting/hooks/usePrescoutingTeamMatches';
+import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
 import { getMatchEventKey, loadYoutubeVideoForMatch } from '../prescouting/matchData';
 import {
   clearPendingPrescoutingQuickScout,
@@ -102,6 +103,13 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
     formRef.current = formState;
   }, [formState]);
 
+  const {
+    teamNumbers,
+    isLoading: isLoadingTeams,
+    error: teamListError,
+    reload: reloadTeams,
+  } = usePrescoutingTeamNumbers({ seasonYear: PRESCOUTING_SEASON_YEAR });
+
   const { matches, isLoading: matchesLoading, error: matchesError } = usePrescoutingTeamMatches(
     selectedTeamNumber,
     PRESCOUTING_SEASON_YEAR,
@@ -153,8 +161,18 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
       teamsWithEntries.add(entry.teamNumber);
     });
 
-    return PRESCOUTING_TEAMS.filter((row) => !teamsWithEntries.has(row.teamNumber));
-  }, [scoutedIndex.entries]);
+    return teamNumbers.filter((teamNumber) => !teamsWithEntries.has(teamNumber));
+  }, [scoutedIndex.entries, teamNumbers]);
+
+  useEffect(() => {
+    if (isLoadingTeams || !selectedTeamNumber || teamNumbers.includes(selectedTeamNumber)) {
+      return;
+    }
+
+    setSelectedTeamNumber(null);
+    setSelectedMatchKey('');
+    setWarningTeamNumber(null);
+  }, [isLoadingTeams, selectedTeamNumber, teamNumbers]);
 
   useEffect(() => {
     void loadClaims();
@@ -345,11 +363,6 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
     };
   }, [selectedMatch]);
 
-  const selectedRankingRow = useMemo(
-    () => PRESCOUTING_TEAMS.find((row) => row.teamNumber === selectedTeamNumber) || null,
-    [selectedTeamNumber],
-  );
-
   const alreadyScouted = useMemo(() => {
     if (!selectedTeamNumber || !selectedMatch) {
       return false;
@@ -461,9 +474,37 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
         <div>
           <h2 className="text-2xl font-bold text-white">Prescouting Match Scouting</h2>
           <p className="text-sm text-slate-300 mt-1">
-            Select one of the 66 hardcoded teams, choose one of its {PRESCOUTING_SEASON_YEAR} matches, watch the video, and scout with the standard flow.
+            Select one of the configured teams, choose one of its {PRESCOUTING_SEASON_YEAR} matches, watch the video, and scout with the standard flow.
           </p>
         </div>
+
+        {isLoadingTeams && (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-300 inline-flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading configured Prescouting teams...
+          </div>
+        )}
+
+        {!isLoadingTeams && teamListError && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/40 bg-rose-950/20 px-4 py-3 text-sm text-rose-200">
+            <span>{teamListError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                void reloadTeams();
+              }}
+              className="shrink-0 rounded-lg border border-slate-600 px-2 py-1 text-slate-200 hover:border-slate-400"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!isLoadingTeams && !teamListError && teamNumbers.length === 0 && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">
+            No Prescouting teams are configured. Ask an admin to add teams in Settings.
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -480,12 +521,15 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
 
                 attemptTeamSelection(nextTeamNumber);
               }}
+              disabled={isLoadingTeams || Boolean(teamListError) || teamNumbers.length === 0}
               className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Select a team</option>
-              {PRESCOUTING_TEAMS.map((row) => (
-                <option key={row.teamNumber} value={row.teamNumber}>
-                  #{row.rank} - Team {row.teamNumber} ({row.totalPoints} pts)
+              <option value="">
+                {isLoadingTeams ? 'Loading teams...' : teamListError ? 'Unable to load teams' : teamNumbers.length === 0 ? 'No teams configured' : 'Select a team'}
+              </option>
+              {teamNumbers.map((teamNumber) => (
+                <option key={teamNumber} value={teamNumber}>
+                  Team {teamNumber}
                 </option>
               ))}
             </select>
@@ -521,12 +565,6 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
             </select>
           </div>
         </div>
-
-        {selectedRankingRow && (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
-            Team {selectedRankingRow.teamNumber}: Rank #{selectedRankingRow.rank}, Event points {selectedRankingRow.event1Points} + {selectedRankingRow.event2Points}, Total {selectedRankingRow.totalPoints}
-          </div>
-        )}
 
         {matchesLoading && (
           <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-300 inline-flex items-center gap-2">
@@ -620,12 +658,12 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
             <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 space-y-2">
               <p className="text-xs uppercase tracking-wide text-slate-400">Teams with zero scouting entries</p>
               {teamsWithNoScoutingEntries.length === 0 ? (
-                <p className="text-sm text-emerald-200">Every team already has at least one scouting entry.</p>
+                <p className="text-sm text-emerald-200">Every configured team already has at least one scouting entry.</p>
               ) : (
                 <div className="max-h-40 overflow-auto grid gap-1 sm:grid-cols-2">
-                  {teamsWithNoScoutingEntries.map((row) => (
-                    <div key={row.teamNumber} className="text-sm text-slate-200 rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1">
-                      Team {row.teamNumber}
+                  {teamsWithNoScoutingEntries.map((teamNumber) => (
+                    <div key={teamNumber} className="text-sm text-slate-200 rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1">
+                      Team {teamNumber}
                     </div>
                   ))}
                 </div>

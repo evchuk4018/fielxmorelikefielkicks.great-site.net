@@ -206,6 +206,21 @@ create table if not exists public.prescouting_team_claims (
   constraint prescouting_team_claims_unique_team unique (season_year, team_number)
 );
 
+create table if not exists public.prescouting_settings (
+  season_year integer primary key check (season_year > 0),
+  team_numbers jsonb not null default '[]'::jsonb check (jsonb_typeof(team_numbers) = 'array'),
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+-- Preserve the existing 2026 Prescouting roster while moving ownership to Settings.
+insert into public.prescouting_settings (season_year, team_numbers)
+values (
+  2026,
+  '[341, 316, 8513, 2607, 1403, 103, 9094, 1218, 5895, 2590, 1391, 5181, 272, 3637, 11, 1676, 484, 2539, 1923, 8706, 9015, 1640, 3314, 433, 1672, 56, 555, 293, 6921, 486, 7045, 222, 7587, 193, 708, 5401, 10949, 4285, 7110, 1168, 1089, 423, 25, 223, 10157, 5438, 5789, 10400, 427, 303, 10584, 10979, 5732, 1807, 365, 2016, 1811, 1712, 9416, 10070, 10993, 75, 4575, 41, 9027, 10918]'::jsonb
+)
+on conflict (season_year) do nothing;
+
 create table if not exists public.admin_user_state (
   id text primary key,
   active_user_profile_id text references public.admin_user_profiles(id) on delete set null
@@ -263,6 +278,7 @@ create index if not exists idx_scout_assignments_scout_profile_id on public.scou
 create index if not exists idx_prescouting_team_claims_season_team on public.prescouting_team_claims (season_year, team_number);
 create index if not exists idx_prescouting_team_claims_claimer_profile_id on public.prescouting_team_claims (claimer_profile_id);
 create index if not exists idx_prescouting_team_claims_updated_at on public.prescouting_team_claims (updated_at desc);
+create index if not exists idx_prescouting_settings_updated_at on public.prescouting_settings (updated_at desc);
 create index if not exists idx_field_map_settings_updated_at on public.field_map_settings (updated_at desc);
 create index if not exists idx_pit_question_definitions_order on public.pit_question_definitions (display_order asc);
 create index if not exists idx_pit_question_definitions_archived on public.pit_question_definitions (archived);
@@ -313,6 +329,12 @@ before update on public.prescouting_team_claims
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_prescouting_settings_updated_at on public.prescouting_settings;
+create trigger set_prescouting_settings_updated_at
+before update on public.prescouting_settings
+for each row
+execute function public.set_updated_at();
+
 drop trigger if exists set_field_map_settings_updated_at on public.field_map_settings;
 create trigger set_field_map_settings_updated_at
 before update on public.field_map_settings
@@ -333,6 +355,7 @@ alter table public.admin_user_profiles enable row level security;
 alter table public.admin_user_state enable row level security;
 alter table public.scout_assignments enable row level security;
 alter table public.prescouting_team_claims enable row level security;
+alter table public.prescouting_settings enable row level security;
 alter table public.field_map_settings enable row level security;
 alter table public.pit_question_definitions enable row level security;
 
@@ -430,6 +453,14 @@ with check (true);
 drop policy if exists "service_role_full_prescouting_team_claims" on public.prescouting_team_claims;
 create policy "service_role_full_prescouting_team_claims"
 on public.prescouting_team_claims
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists "service_role_full_prescouting_settings" on public.prescouting_settings;
+create policy "service_role_full_prescouting_settings"
+on public.prescouting_settings
 for all
 to service_role
 using (true)
@@ -598,6 +629,22 @@ with check (true);
 drop policy if exists "anon_rw_prescouting_team_claims" on public.prescouting_team_claims;
 create policy "anon_rw_prescouting_team_claims"
 on public.prescouting_team_claims
+for all
+to anon
+using (true)
+with check (true);
+
+drop policy if exists "authenticated_rw_prescouting_settings" on public.prescouting_settings;
+create policy "authenticated_rw_prescouting_settings"
+on public.prescouting_settings
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_prescouting_settings" on public.prescouting_settings;
+create policy "anon_rw_prescouting_settings"
+on public.prescouting_settings
 for all
 to anon
 using (true)

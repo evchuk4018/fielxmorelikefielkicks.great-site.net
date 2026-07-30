@@ -4,6 +4,14 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFieldMap } from '../app/context/FieldMapContext';
 import { PitQuestionEditor } from './PitQuestionEditor';
+import { showToast } from './Toast';
+import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
+import {
+  parsePrescoutingTeamNumbersInput,
+  PRESCOUTING_TEAM_LIST_UPDATED_EVENT,
+  savePrescoutingTeamNumbers,
+} from '../prescouting/teamSettingsRepository';
+import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,14 +35,33 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [activeEventKey, setActiveEventKey] = useState('');
   const [selectedMapFile, setSelectedMapFile] = useState<File | null>(null);
+  const [prescoutingTeamInput, setPrescoutingTeamInput] = useState('');
+  const [prescoutingSaveError, setPrescoutingSaveError] = useState<string | null>(null);
+  const [isPrescoutingSaving, setIsPrescoutingSaving] = useState(false);
   const { imageSrc, isLoading: isFieldMapLoading, isUploading, error: fieldMapError, uploadImage } = useFieldMap();
+  const {
+    teamNumbers: prescoutingTeamNumbers,
+    isLoading: isPrescoutingTeamsLoading,
+    error: prescoutingTeamsError,
+    reload: reloadPrescoutingTeams,
+  } = usePrescoutingTeamNumbers({
+    seasonYear: PRESCOUTING_SEASON_YEAR,
+    enabled: isOpen && isAdminSignedIn,
+  });
 
   useEffect(() => {
     if (isOpen) {
       setActiveEventKey(activeProfile?.eventKey || 'No active profile');
       setSelectedMapFile(null);
+      setPrescoutingSaveError(null);
     }
   }, [activeProfile?.eventKey, isOpen]);
+
+  useEffect(() => {
+    if (isOpen && !isPrescoutingTeamsLoading && !isPrescoutingSaving) {
+      setPrescoutingTeamInput(prescoutingTeamNumbers.join('\n'));
+    }
+  }, [isOpen, isPrescoutingSaving, isPrescoutingTeamsLoading, prescoutingTeamNumbers]);
 
   const handleMapUpload = async () => {
     if (!selectedMapFile) {
@@ -44,6 +71,34 @@ export function SettingsModal({
     const uploaded = await uploadImage(selectedMapFile);
     if (uploaded) {
       setSelectedMapFile(null);
+    }
+  };
+
+  const handlePrescoutingSave = async () => {
+    const parsed = parsePrescoutingTeamNumbersInput(prescoutingTeamInput);
+    if (parsed.invalidTokens.length > 0) {
+      setPrescoutingSaveError(`Invalid team number(s): ${parsed.invalidTokens.join(', ')}`);
+      return;
+    }
+
+    setIsPrescoutingSaving(true);
+    setPrescoutingSaveError(null);
+    try {
+      const saved = await savePrescoutingTeamNumbers({
+        seasonYear: PRESCOUTING_SEASON_YEAR,
+        teamNumbers: parsed.teamNumbers,
+        isAdmin: isAdminSignedIn,
+      });
+      setPrescoutingTeamInput(saved.teamNumbers.join('\n'));
+      showToast(`Saved ${saved.teamNumbers.length} Prescouting team${saved.teamNumbers.length === 1 ? '' : 's'}.`);
+      window.dispatchEvent(new CustomEvent(PRESCOUTING_TEAM_LIST_UPDATED_EVENT));
+      void reloadPrescoutingTeams();
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : 'Failed to save Prescouting teams.';
+      setPrescoutingSaveError(message);
+      showToast(message);
+    } finally {
+      setIsPrescoutingSaving(false);
     }
   };
 
@@ -83,6 +138,63 @@ export function SettingsModal({
                   <p className="text-white font-semibold">{activeProfile.name}</p>
                   <p>{activeProfile.location}</p>
                   <p>{activeProfile.teamCount} teams cached</p>
+                </div>
+              )}
+
+              {isAdminSignedIn && (
+                <div className="space-y-3 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Prescouting Teams ({PRESCOUTING_SEASON_YEAR})</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Enter one team number per line. Blank lines are ignored, duplicates are removed, and an empty list is allowed.
+                    </p>
+                  </div>
+
+                  <textarea
+                    value={prescoutingTeamInput}
+                    onChange={(event) => {
+                      setPrescoutingTeamInput(event.target.value);
+                      setPrescoutingSaveError(null);
+                    }}
+                    disabled={isPrescoutingTeamsLoading || isPrescoutingSaving}
+                    rows={8}
+                    placeholder="341\n316\n8513"
+                    className="w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                  />
+
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 text-xs text-slate-400">
+                      {isPrescoutingTeamsLoading
+                        ? 'Loading saved teams...'
+                        : `${prescoutingTeamNumbers.length} team${prescoutingTeamNumbers.length === 1 ? '' : 's'} currently saved.`}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handlePrescoutingSave();
+                      }}
+                      disabled={isPrescoutingTeamsLoading || isPrescoutingSaving}
+                      className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500"
+                    >
+                      {isPrescoutingSaving ? 'Saving...' : 'Save Teams'}
+                    </button>
+                  </div>
+
+                  {prescoutingTeamsError && (
+                    <div className="flex items-center justify-between gap-3 text-xs text-rose-300">
+                      <span>{prescoutingTeamsError}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void reloadPrescoutingTeams();
+                        }}
+                        className="shrink-0 rounded-lg border border-slate-600 px-2 py-1 text-slate-200 hover:border-slate-400"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {prescoutingSaveError && <p className="text-xs text-rose-300">{prescoutingSaveError}</p>}
                 </div>
               )}
 

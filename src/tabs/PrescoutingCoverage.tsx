@@ -5,7 +5,8 @@ import { formatMatchLabel } from '../lib/matchUtils';
 import { claimPrescoutingTeam, listActivePrescoutingTeamClaims, releasePrescoutingTeamClaim } from '../lib/supabase';
 import { TBAMatch, PrescoutingTeamClaim } from '../types';
 import { UserProfile } from '../app/types';
-import { PRESCOUTING_SEASON_YEAR, PRESCOUTING_TEAMS, PRESCOUTING_TEAM_NUMBERS } from '../prescouting/constants';
+import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
+import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
 import { getMatchEventKey, loadAllTeamMatchesForPrescouting, sortMatches } from '../prescouting/matchData';
 import { PrescoutingQuickScoutTarget } from '../prescouting/quickScout';
 import { isTeamMatchAlreadyScouted, loadPrescoutingScoutedIndex, PrescoutingScoutedIndex } from '../prescouting/scoutedEntries';
@@ -52,14 +53,26 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
   const [error, setError] = useState<string | null>(null);
 
   const loadSequence = useRef(0);
+  const {
+    teamNumbers,
+    isLoading: isLoadingTeams,
+    error: teamListError,
+    reload: reloadTeams,
+  } = usePrescoutingTeamNumbers({ seasonYear: PRESCOUTING_SEASON_YEAR });
 
   const loadSchedule = useCallback(async () => {
     const sequence = ++loadSequence.current;
     setIsLoadingSchedule(true);
     setError(null);
 
+    if (isLoadingTeams || teamListError || teamNumbers.length === 0) {
+      setTeamMatchesMap(new Map());
+      setIsLoadingSchedule(false);
+      return;
+    }
+
     try {
-      const nextMap = await loadAllTeamMatchesForPrescouting(PRESCOUTING_TEAM_NUMBERS, PRESCOUTING_SEASON_YEAR);
+      const nextMap = await loadAllTeamMatchesForPrescouting(teamNumbers, PRESCOUTING_SEASON_YEAR);
       if (sequence !== loadSequence.current) {
         return;
       }
@@ -75,7 +88,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
         setIsLoadingSchedule(false);
       }
     }
-  }, []);
+  }, [isLoadingTeams, teamListError, teamNumbers]);
 
   const loadStatus = useCallback(async () => {
     setIsLoadingStatus(true);
@@ -232,7 +245,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
   const columns = useMemo(() => {
     const byKey = new Map<string, MatchColumn>();
 
-    PRESCOUTING_TEAM_NUMBERS.forEach((teamNumber) => {
+    teamNumbers.forEach((teamNumber) => {
       const matches = teamMatchesMap.get(teamNumber) || [];
       matches.forEach((match) => {
         const eventKey = getMatchEventKey(match);
@@ -266,7 +279,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     });
 
     return all;
-  }, [teamMatchesMap]);
+  }, [teamMatchesMap, teamNumbers]);
 
   const coverageMetadata = useMemo(() => {
     const coveredKeys = new Set<string>();
@@ -275,7 +288,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     const coveredCountByMatch = new Map<string, number>();
     const scheduledCountByMatch = new Map<string, number>();
 
-    PRESCOUTING_TEAM_NUMBERS.forEach((teamNumber) => {
+    teamNumbers.forEach((teamNumber) => {
       scheduledCountByTeam.set(teamNumber, 0);
       coveredCountByTeam.set(teamNumber, 0);
     });
@@ -307,7 +320,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
       coveredCountByMatch,
       scheduledCountByMatch,
     };
-  }, [columns, scoutedIndex]);
+  }, [columns, scoutedIndex, teamNumbers]);
 
   const overallScheduled = useMemo(
     () => Array.from(coverageMetadata.scheduledCountByTeam.values()).reduce((sum, value) => sum + value, 0),
@@ -319,18 +332,18 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
   );
   const teamsWithThreePlusScouted = useMemo(
     () =>
-      PRESCOUTING_TEAMS.reduce((count, team) => {
-        const coveredCount = coverageMetadata.coveredCountByTeam.get(team.teamNumber) || 0;
+      teamNumbers.reduce((count, teamNumber) => {
+        const coveredCount = coverageMetadata.coveredCountByTeam.get(teamNumber) || 0;
         return coveredCount >= 3 ? count + 1 : count;
       }, 0),
-    [coverageMetadata.coveredCountByTeam],
+    [coverageMetadata.coveredCountByTeam, teamNumbers],
   );
   const teamsWithThreePlusScoutedRate = useMemo(
     () =>
-      PRESCOUTING_TEAMS.length > 0
-        ? Math.round((teamsWithThreePlusScouted / PRESCOUTING_TEAMS.length) * 100)
+      teamNumbers.length > 0
+        ? Math.round((teamsWithThreePlusScouted / teamNumbers.length) * 100)
         : 0,
-    [teamsWithThreePlusScouted],
+    [teamNumbers.length, teamsWithThreePlusScouted],
   );
 
   const visibleColumns = useMemo(() => {
@@ -347,22 +360,63 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
 
   const visibleTeams = useMemo(() => {
     if (!showOnlyUncovered) {
-      return PRESCOUTING_TEAMS;
+      return teamNumbers;
     }
 
-    return PRESCOUTING_TEAMS.filter((team) => {
-      const coveredCount = coverageMetadata.coveredCountByTeam.get(team.teamNumber) || 0;
-      const scheduledCount = coverageMetadata.scheduledCountByTeam.get(team.teamNumber) || 0;
+    return teamNumbers.filter((teamNumber) => {
+      const coveredCount = coverageMetadata.coveredCountByTeam.get(teamNumber) || 0;
+      const scheduledCount = coverageMetadata.scheduledCountByTeam.get(teamNumber) || 0;
       return Math.max(scheduledCount - coveredCount, 0) > 0;
     });
-  }, [coverageMetadata.coveredCountByTeam, coverageMetadata.scheduledCountByTeam, showOnlyUncovered]);
+  }, [coverageMetadata.coveredCountByTeam, coverageMetadata.scheduledCountByTeam, showOnlyUncovered, teamNumbers]);
+
+  if (isLoadingTeams) {
+    return (
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-300 inline-flex items-center gap-2">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading configured Prescouting teams...
+        </div>
+      </div>
+    );
+  }
+
+  if (teamListError) {
+    return (
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="bg-rose-900/20 border border-rose-500/30 rounded-2xl p-6 text-rose-200 space-y-3">
+          <p>{teamListError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void reloadTeams();
+            }}
+            className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-slate-400"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (teamNumbers.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="bg-slate-800/50 border border-amber-500/30 rounded-2xl p-6 text-amber-200 space-y-2">
+          <h2 className="text-xl font-semibold text-white">Prescouting Coverage Matrix</h2>
+          <p>No Prescouting teams are configured. Ask an admin to add teams in Settings.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoadingSchedule) {
     return (
       <div className="max-w-7xl mx-auto px-4">
         <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-300 inline-flex items-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
-          Loading prescouting schedule for all 66 teams...
+          Loading prescouting schedule for all {teamNumbers.length} configured teams...
         </div>
       </div>
     );
@@ -383,7 +437,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
           <div>
             <h2 className="text-2xl font-bold text-white">Prescouting Coverage Matrix</h2>
             <p className="mt-1 text-sm text-slate-300">
-              66 hardcoded teams across all {PRESCOUTING_SEASON_YEAR} matches they played in every event.
+              {teamNumbers.length} configured teams across all {PRESCOUTING_SEASON_YEAR} matches they played in every event.
             </p>
             <p className="mt-1 text-xs text-slate-400">
               Claims are advisory only. Any scout can still proceed scouting after warning.
@@ -402,7 +456,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
             </button>
             <button
               onClick={() => {
-                void Promise.all([loadSchedule(), loadStatus(), loadClaims()]);
+                void Promise.all([reloadTeams(), loadSchedule(), loadStatus(), loadClaims()]);
               }}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
             >
@@ -469,18 +523,18 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                 </tr>
               )}
 
-              {visibleTeams.map((team) => {
-                const scheduledCount = coverageMetadata.scheduledCountByTeam.get(team.teamNumber) || 0;
-                const coveredCount = coverageMetadata.coveredCountByTeam.get(team.teamNumber) || 0;
+              {visibleTeams.map((teamNumber) => {
+                const scheduledCount = coverageMetadata.scheduledCountByTeam.get(teamNumber) || 0;
+                const coveredCount = coverageMetadata.coveredCountByTeam.get(teamNumber) || 0;
                 const complete = scheduledCount > 0 && coveredCount === scheduledCount;
-                const claim = claimsByTeam.get(team.teamNumber);
+                const claim = claimsByTeam.get(teamNumber);
                 const claimedByCurrentUser = Boolean(claim && signedInUserProfile && claim.claimerProfileId === signedInUserProfile.id);
-                const claimAction = claimActionByTeam[team.teamNumber];
+                const claimAction = claimActionByTeam[teamNumber];
 
                 return (
-                  <tr key={team.teamNumber}>
+                  <tr key={teamNumber}>
                     <th className="sticky left-0 z-10 bg-slate-900/95 px-3 py-2 text-left border-b border-r border-slate-700">
-                      <div className="font-semibold text-slate-100">#{team.rank} - Team {team.teamNumber}</div>
+                      <div className="font-semibold text-slate-100">Team {teamNumber}</div>
                       <div className="text-[11px] text-slate-400">{coveredCount}/{scheduledCount}</div>
                       <div className={`text-[10px] mt-0.5 ${complete ? 'text-emerald-300' : 'text-rose-300'}`}>
                         {complete ? 'Complete' : 'Missing'}
@@ -496,7 +550,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                             {isAdminSignedIn && (
                               <button
                                 onClick={() => {
-                                  void releaseTeam(team.teamNumber);
+                                  void releaseTeam(teamNumber);
                                 }}
                                 disabled={claimAction === 'release'}
                                 className="text-[10px] px-2 py-1 rounded-md border border-slate-600 text-slate-100 hover:bg-slate-800 disabled:opacity-60"
@@ -508,7 +562,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                         ) : (
                           <button
                             onClick={() => {
-                              void claimTeam(team.teamNumber);
+                              void claimTeam(teamNumber);
                             }}
                             disabled={claimAction === 'claim' || !signedInUserProfile}
                             className="text-[10px] px-2 py-1 rounded-md border border-blue-500/50 text-blue-100 hover:bg-blue-900/30 disabled:opacity-60"
@@ -519,14 +573,14 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                       </div>
                     </th>
                     {visibleColumns.map((column) => {
-                      const scheduled = column.teamNumbers.has(team.teamNumber);
-                      const covered = coverageMetadata.coveredKeys.has(`${column.key}|${team.teamNumber}`);
+                      const scheduled = column.teamNumbers.has(teamNumber);
+                      const covered = coverageMetadata.coveredKeys.has(`${column.key}|${teamNumber}`);
                       const uncovered = scheduled && !covered;
 
                       if (showOnlyUncovered && !uncovered) {
                         return (
                           <td
-                            key={`${column.key}:${team.teamNumber}`}
+                            key={`${column.key}:${teamNumber}`}
                             className="h-9 border-b border-r border-transparent bg-transparent"
                             aria-hidden="true"
                           />
@@ -536,7 +590,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                       if (!scheduled) {
                         return (
                           <td
-                            key={`${column.key}:${team.teamNumber}`}
+                            key={`${column.key}:${teamNumber}`}
                             className="h-9 border-b border-r border-slate-800 bg-slate-950/70 text-center text-slate-600"
                             title="Team not in this match"
                           >
@@ -548,7 +602,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
                       if (covered) {
                         return (
                           <td
-                            key={`${column.key}:${team.teamNumber}`}
+                            key={`${column.key}:${teamNumber}`}
                             className="h-9 border-b border-r border-slate-700 text-center font-semibold bg-emerald-900/35 text-emerald-200"
                             title="Scouted"
                           >
@@ -559,8 +613,8 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
 
                       return (
                         <td
-                          key={`${column.key}:${team.teamNumber}`}
-                          onClick={() => handleQuickScout(column, team.teamNumber, covered)}
+                          key={`${column.key}:${teamNumber}`}
+                          onClick={() => handleQuickScout(column, teamNumber, covered)}
                           className="h-9 border-b border-r border-slate-700 text-center font-semibold bg-rose-900/30 text-rose-200 cursor-pointer hover:bg-rose-800/40"
                           title="Missing - click to scout this match"
                         >
