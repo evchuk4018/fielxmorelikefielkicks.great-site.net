@@ -1,6 +1,15 @@
 import { storage } from './storage';
 import { TBATeam, TBAMatch, TBAMatchDetail, TBAEvent, TBARankings } from '../types';
 
+async function readJsonResponse<T>(response: Response, errorMessage: string): Promise<T> {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(`${errorMessage}: server returned ${contentType || 'a non-JSON response'}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 export const tba = {
   async fetchEvent(eventKey: string): Promise<TBAEvent> {
     const normalizedEventKey = eventKey.trim().toLowerCase();
@@ -111,12 +120,12 @@ export const tba = {
       normalizedMatchKey,
     });
 
-    const response = await fetch(`/api/tba/match_detail/${encodeURIComponent(normalizedMatchKey)}`);
+    const response = await fetch(`/api/tba/match_detail?matchKey=${encodeURIComponent(normalizedMatchKey)}`);
     if (!response.ok) {
       throw new Error('Failed to fetch match detail');
     }
 
-    const detail = (await response.json()) as TBAMatchDetail;
+    const detail = await readJsonResponse<TBAMatchDetail>(response, 'Failed to fetch match detail');
     storage.set(cacheKey, detail);
     console.log('[tba.fetchMatchDetail] success', {
       normalizedMatchKey,
