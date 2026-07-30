@@ -219,6 +219,20 @@ create table if not exists public.field_map_settings (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.pit_question_definitions (
+  key text primary key,
+  label text not null,
+  question_type text not null check (question_type in ('boolean', 'short_text', 'long_text', 'number', 'single_choice', 'multi_choice')),
+  options jsonb not null default '[]'::jsonb,
+  archived boolean not null default false,
+  display_order integer not null default 0,
+  section text not null default 'Custom Questions',
+  built_in boolean not null default false,
+  show_when jsonb,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 alter table public.match_scouts
 add column if not exists previous_team_ranking text;
 
@@ -250,6 +264,8 @@ create index if not exists idx_prescouting_team_claims_season_team on public.pre
 create index if not exists idx_prescouting_team_claims_claimer_profile_id on public.prescouting_team_claims (claimer_profile_id);
 create index if not exists idx_prescouting_team_claims_updated_at on public.prescouting_team_claims (updated_at desc);
 create index if not exists idx_field_map_settings_updated_at on public.field_map_settings (updated_at desc);
+create index if not exists idx_pit_question_definitions_order on public.pit_question_definitions (display_order asc);
+create index if not exists idx_pit_question_definitions_archived on public.pit_question_definitions (archived);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -303,6 +319,12 @@ before update on public.field_map_settings
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_pit_question_definitions_updated_at on public.pit_question_definitions;
+create trigger set_pit_question_definitions_updated_at
+before update on public.pit_question_definitions
+for each row
+execute function public.set_updated_at();
+
 alter table public.pit_scouts enable row level security;
 alter table public.match_scouts enable row level security;
 alter table public.face_id_enrollments enable row level security;
@@ -312,6 +334,7 @@ alter table public.admin_user_state enable row level security;
 alter table public.scout_assignments enable row level security;
 alter table public.prescouting_team_claims enable row level security;
 alter table public.field_map_settings enable row level security;
+alter table public.pit_question_definitions enable row level security;
 
 -- Remove any previously-created admin_user_profiles policies (including legacy recursive ones)
 -- so policy state is deterministic across environments before recreating known-safe policies.
@@ -383,6 +406,14 @@ with check (true);
 drop policy if exists "service_role_full_field_map_settings" on public.field_map_settings;
 create policy "service_role_full_field_map_settings"
 on public.field_map_settings
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists "service_role_full_pit_question_definitions" on public.pit_question_definitions;
+create policy "service_role_full_pit_question_definitions"
+on public.pit_question_definitions
 for all
 to service_role
 using (true)
@@ -519,6 +550,22 @@ with check (true);
 drop policy if exists "anon_rw_field_map_settings" on public.field_map_settings;
 create policy "anon_rw_field_map_settings"
 on public.field_map_settings
+for all
+to anon
+using (true)
+with check (true);
+
+drop policy if exists "authenticated_rw_pit_question_definitions" on public.pit_question_definitions;
+create policy "authenticated_rw_pit_question_definitions"
+on public.pit_question_definitions
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_pit_question_definitions" on public.pit_question_definitions;
+create policy "anon_rw_pit_question_definitions"
+on public.pit_question_definitions
 for all
 to anon
 using (true)

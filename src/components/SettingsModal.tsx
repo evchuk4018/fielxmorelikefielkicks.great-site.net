@@ -3,6 +3,7 @@ import { CompetitionProfile } from '../types';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFieldMap } from '../app/context/FieldMapContext';
+import { PitQuestionEditor } from './PitQuestionEditor';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export function SettingsModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full max-w-4xl max-h-[92vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
           >
             <div className="flex items-center justify-between p-6 border-b border-slate-800">
               <h2 className="text-xl font-bold text-white">Settings</h2>
@@ -66,7 +67,7 @@ export function SettingsModal({
               </button>
             </div>
             
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-300">Active Competition Event Key</label>
                 <input
@@ -131,6 +132,8 @@ export function SettingsModal({
                   <p className="text-xs text-slate-400">Only admins can change the shared field map.</p>
                 )}
               </div>
+
+              <PitQuestionEditor isAdminSignedIn={isAdminSignedIn} />
 
               <div className="space-y-2 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
                 <p className="text-sm font-semibold text-white">Signed-in User</p>

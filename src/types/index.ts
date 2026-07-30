@@ -11,6 +11,28 @@ export type CardReceived = 'None' | 'Yellow' | 'Red';
 export type DefenseQuality = 'Good' | 'Bad';
 export type AutonStartSlot = 'R1' | 'R2' | 'R3' | 'B1' | 'B2' | 'B3';
 
+export type PitQuestionType = 'boolean' | 'short_text' | 'long_text' | 'number' | 'single_choice' | 'multi_choice';
+export type PitAnswer = boolean | number | string | string[] | null;
+export type PitAnswers = Record<string, PitAnswer>;
+export type PitQuestionSection = 'Robot Details' | 'Game Mechanisms' | 'Strategy & Notes' | 'Custom Questions';
+
+export interface PitQuestionVisibility {
+  questionKey: string;
+  equals: boolean | number | string;
+}
+
+export interface PitQuestionDefinition {
+  key: string;
+  label: string;
+  type: PitQuestionType;
+  options: string[];
+  archived: boolean;
+  order: number;
+  section: PitQuestionSection;
+  builtIn?: boolean;
+  showWhen?: PitQuestionVisibility;
+}
+
 export interface AutonTrajectoryPoint {
   x: number;
   y: number;
@@ -43,6 +65,7 @@ export interface PitScoutData {
   profileId?: string;
   teamNumber: number | '';
   photoUrls: string[];
+  answers?: PitAnswers;
   canClimbTower: boolean;
   maxClimbLevel?: ClimbLevel;
   fuelHopperCapacity: number | '';

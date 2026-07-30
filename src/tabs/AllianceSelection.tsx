@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import { getProfileTeams } from '../lib/competitionProfiles';
 import { statbotics, StatboticsTeamEvent } from '../lib/statbotics';
+import { getPitAnswer, hasPitAnswerValue, loadPitQuestionDefinitions } from '../lib/pitQuestions';
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { tba } from '../lib/tba';
-import { MatchScoutData, PitScoutData, SyncRecord, TBARanking, TBARankings, TBATeam } from '../types';
+import { MatchScoutData, PitAnswer, PitQuestionDefinition, PitScoutData, SyncRecord, TBARanking, TBARankings, TBATeam } from '../types';
 
 type AllianceSelectionProps = {
   eventKey: string;
@@ -35,6 +36,7 @@ type TeamNoteSummary = {
   hasTurret: boolean | null;
   canPlayDefense: boolean | null;
   defenseStyle: string | null;
+  customPitAnswers: Array<{ key: string; label: string; value: PitAnswer }>;
 };
 
 type AllianceBoardRow = {
@@ -75,6 +77,7 @@ type PitSnapshot = {
   hasTurret: boolean | null;
   canPlayDefense: boolean | null;
   defenseStyle: string | null;
+  customPitAnswers: Array<{ key: string; label: string; value: PitAnswer }>;
 };
 
 type RankingMode = 'draft' | 'combined_epa' | 'auto_epa' | 'total_epa' | 'tba_rank';
@@ -213,6 +216,26 @@ function normalizeStringArray(value: unknown): string[] {
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function buildCustomPitAnswers(payload: unknown, definitions: PitQuestionDefinition[]): Array<{ key: string; label: string; value: PitAnswer }> {
+  return definitions
+    .filter((definition) => !definition.builtIn)
+    .map((definition) => ({ key: definition.key, label: definition.label, value: getPitAnswer(payload, definition.key) }))
+    .filter((answer): answer is { key: string; label: string; value: PitAnswer } => hasPitAnswerValue(answer.value));
+}
+
+function displayPitAnswer(value: PitAnswer): string {
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  if (Array.isArray(value)) {
+    return value.join(', ') || '--';
+  }
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+  return String(value);
 }
 
 function getPayloadEventKey(payload: unknown): string {
@@ -365,6 +388,7 @@ function summarizeMatchNoteLines(lines: MatchNoteLine[]): { aiNotes: Map<number,
 
 async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | null): Promise<Map<number, TeamNoteSummary>> {
   const normalizedEventKey = normalizeEventKey(eventKey);
+  const pitQuestionDefinitions = await loadPitQuestionDefinitions();
 
   const pitByTeam = new Map<number, PitSnapshot>();
   const matchLines: MatchNoteLine[] = [];
@@ -431,6 +455,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
         hasTurret,
         canPlayDefense,
         defenseStyle,
+        customPitAnswers: buildCustomPitAnswers(payload, pitQuestionDefinitions),
       });
     }
   });
@@ -529,6 +554,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
           hasTurret,
           canPlayDefense,
           defenseStyle,
+          customPitAnswers: buildCustomPitAnswers(payload, pitQuestionDefinitions),
         });
       }
     });
@@ -599,6 +625,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
       hasTurret: pit?.hasTurret ?? null,
       canPlayDefense: pit?.canPlayDefense ?? null,
       defenseStyle: pit?.defenseStyle || null,
+      customPitAnswers: pit?.customPitAnswers || [],
     });
   });
 
@@ -845,6 +872,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
               hasTurret: null,
               canPlayDefense: null,
               defenseStyle: null,
+              customPitAnswers: [],
             };
 
             return {
@@ -900,11 +928,16 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
       }
     };
 
+    const onQuestionnaireUpdated = () => {
+      refresh();
+    };
+
     const interval = window.setInterval(refresh, REFRESH_INTERVAL_MS);
     window.addEventListener('focus', refresh);
     window.addEventListener('sync-success', refresh);
     window.addEventListener('team-import-success', refresh);
     window.addEventListener('storage', onStorageChange);
+    window.addEventListener('pit-questions-updated', onQuestionnaireUpdated);
 
     return () => {
       cancelled = true;
@@ -913,6 +946,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
       window.removeEventListener('sync-success', refresh);
       window.removeEventListener('team-import-success', refresh);
       window.removeEventListener('storage', onStorageChange);
+      window.removeEventListener('pit-questions-updated', onQuestionnaireUpdated);
     };
   }, [normalizedEventKey, pickedStorageKey, profileId, refreshToken]);
 
@@ -1428,6 +1462,20 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
                     </div>
                   )}
                 </div>
+
+                {row.notes.customPitAnswers.length > 0 && (
+                  <details className="mt-4 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3">
+                    <summary className="cursor-pointer text-xs uppercase tracking-wide text-slate-400">Custom Pit Answers</summary>
+                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-800 pt-3 sm:grid-cols-2">
+                      {row.notes.customPitAnswers.map((answer) => (
+                        <div key={`${row.teamNumber}-${answer.key}`}>
+                          <p className="text-xs text-slate-500">{answer.label}</p>
+                          <p className="text-sm text-slate-200">{displayPitAnswer(answer.value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 <div className="mt-4 flex justify-end">
                   <button
