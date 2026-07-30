@@ -1,8 +1,9 @@
 import React from 'react';
 import { showToast } from '../../components/Toast';
 import { UserRole } from '../../types';
-import { ADMIN_PIN, ADMIN_SIGNUP_ENABLED, MIN_PASSWORD_LENGTH } from '../constants';
+import { MIN_PASSWORD_LENGTH } from '../constants';
 import { hashPassword, verifyPassword } from './passwordCrypto';
+import { verifyAdminPin } from './pinCrypto';
 import {
   clearStoredActiveUserProfileId,
   generateUserProfileId,
@@ -10,14 +11,11 @@ import {
   saveStoredUserProfiles,
   setStoredActiveUserProfileId,
 } from './profileStorage';
-import { FaceIdMode, PendingFaceIdAction, UserProfile } from '../types';
+import { UserProfile } from '../types';
 
 type ProfileStateSetters = {
   setUserProfiles: React.Dispatch<React.SetStateAction<UserProfile[]>>;
   setSignedInUserProfileId: React.Dispatch<React.SetStateAction<string | null>>;
-  setIsSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  setFaceIdMode: React.Dispatch<React.SetStateAction<FaceIdMode | null>>;
-  setPendingFaceIdAction: React.Dispatch<React.SetStateAction<PendingFaceIdAction>>;
 };
 
 export async function signOutUserProfile(params: {
@@ -34,37 +32,24 @@ export async function signOutUserProfile(params: {
 
 export async function createPasswordUserProfile(params: {
   role: UserRole;
-  pin?: string;
   name: string;
   password: string;
-  isFaceIdBusy: boolean;
   userProfiles: UserProfile[];
 } & Pick<ProfileStateSetters, 'setUserProfiles' | 'setSignedInUserProfileId'> & {
     resetAuthInputs: () => void;
   }): Promise<void> {
   const {
     role,
-    pin,
     name: rawName,
     password,
-    isFaceIdBusy,
     userProfiles,
     setUserProfiles,
     setSignedInUserProfileId,
     resetAuthInputs,
   } = params;
 
-  if (isFaceIdBusy) {
-    return;
-  }
-
-  if (role === 'admin' && !ADMIN_SIGNUP_ENABLED) {
-    showToast('New admin account creation is disabled');
-    return;
-  }
-
-  if (role === 'admin' && (pin || '').trim() !== ADMIN_PIN) {
-    showToast('Invalid admin invite PIN');
+  if (role !== 'scout') {
+    showToast('Admin accounts use the shared PIN and cannot be created here');
     return;
   }
 
@@ -95,7 +80,7 @@ export async function createPasswordUserProfile(params: {
   const nextProfile: UserProfile = {
     id: generateUserProfileId(),
     name,
-    role,
+    role: 'scout',
     authType: 'password',
     passwordHash: hash,
     passwordSalt: salt,
@@ -114,100 +99,24 @@ export async function createPasswordUserProfile(params: {
   showToast(`Created and signed into ${name}`);
 }
 
-export async function createFaceIdUserProfile(params: {
-  role: UserRole;
-  pin?: string;
-  name: string;
-  faceIdName: string;
-  isFaceIdBusy: boolean;
-  userProfiles: UserProfile[];
-} & Pick<
-  ProfileStateSetters,
-  'setPendingFaceIdAction' | 'setIsSettingsOpen' | 'setFaceIdMode'
->): Promise<void> {
-  const {
-    role,
-    pin,
-    name: rawName,
-    faceIdName: rawFaceIdName,
-    isFaceIdBusy,
-    userProfiles,
-    setPendingFaceIdAction,
-    setIsSettingsOpen,
-    setFaceIdMode,
-  } = params;
-
-  if (isFaceIdBusy) {
-    return;
-  }
-
-  if (role === 'admin' && !ADMIN_SIGNUP_ENABLED) {
-    showToast('New admin account creation is disabled');
-    return;
-  }
-
-  if (role !== 'admin') {
-    showToast('Face ID is only available for admin profiles');
-    return;
-  }
-
-  if ((pin || '').trim() !== ADMIN_PIN) {
-    showToast('Invalid admin invite PIN');
-    return;
-  }
-
-  const name = rawName.trim();
-  if (!name) {
-    showToast('Name is required');
-    return;
-  }
-
-  const normalizedNameKey = normalizeProfileNameKey(name);
-  const exists = userProfiles.some((profile) => normalizeProfileNameKey(profile.name) === normalizedNameKey);
-  if (exists) {
-    showToast('A profile with that name already exists');
-    return;
-  }
-
-  const faceIdName = rawFaceIdName.trim();
-  if (!faceIdName) {
-    showToast('Face ID name is required');
-    return;
-  }
-
-  setPendingFaceIdAction({ type: 'create-faceid', name, faceIdName, role: 'admin' });
-  setIsSettingsOpen(false);
-  setFaceIdMode('test');
-}
-
 export async function loadUserProfile(params: {
   profileId: string;
   password?: string;
+  pin?: string;
   authRole: UserRole;
-  isFaceIdBusy: boolean;
   userProfiles: UserProfile[];
-} & Pick<
-  ProfileStateSetters,
-  'setSignedInUserProfileId' | 'setPendingFaceIdAction' | 'setIsSettingsOpen' | 'setFaceIdMode'
-> & {
+} & Pick<ProfileStateSetters, 'setSignedInUserProfileId'> & {
     resetAuthInputs: () => void;
   }): Promise<void> {
   const {
     profileId,
     password,
+    pin,
     authRole,
-    isFaceIdBusy,
     userProfiles,
     setSignedInUserProfileId,
-    setPendingFaceIdAction,
-    setIsSettingsOpen,
-    setFaceIdMode,
     resetAuthInputs,
   } = params;
-
-  if (isFaceIdBusy) {
-    return;
-  }
 
   if (userProfiles.length === 0) {
     showToast('No profiles available to load');
@@ -230,6 +139,20 @@ export async function loadUserProfile(params: {
     return;
   }
 
+  if (selectedProfile.role === 'admin') {
+    const pinMatches = await verifyAdminPin(selectedProfile, (pin || '').trim());
+    if (!pinMatches) {
+      showToast('Incorrect admin PIN');
+      return;
+    }
+
+    await setStoredActiveUserProfileId(selectedProfile.id);
+    setSignedInUserProfileId(selectedProfile.id);
+    resetAuthInputs();
+    showToast(`Signed into ${selectedProfile.name}`);
+    return;
+  }
+
   if (selectedProfile.authType === 'password') {
     const passwordMatches = await verifyPassword(selectedProfile, password || '');
     if (!passwordMatches) {
@@ -244,17 +167,5 @@ export async function loadUserProfile(params: {
     return;
   }
 
-  if (selectedProfile.role !== 'admin') {
-    showToast('Only admins can use Face ID');
-    return;
-  }
-
-  setPendingFaceIdAction({
-    type: 'load-faceid',
-    profileId: selectedProfile.id,
-    profileName: selectedProfile.name,
-    faceIdName: selectedProfile.faceIdName || selectedProfile.name,
-  });
-  setIsSettingsOpen(false);
-  setFaceIdMode('test');
+  showToast('Only scout password authentication is available');
 }

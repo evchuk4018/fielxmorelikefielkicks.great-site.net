@@ -1,15 +1,35 @@
 import { showToast } from '../../components/Toast';
 import { UserRole } from '../../types';
-import { ADMIN_SIGNUP_ENABLED } from '../constants';
-import { UserAuthType, UserProfile } from '../types';
+import { UserProfile } from '../types';
 
 export async function loginSubmit(params: {
+  authRole: UserRole;
+  adminProfile: UserProfile | null;
+  authPin: string;
   selectedLoginProfileId: string;
   selectedLoginProfile: UserProfile | null;
   authPassword: string;
-  onLoadUserProfile: (params: { profileId: string; password?: string }) => Promise<void>;
+  onLoadUserProfile: (params: { profileId: string; password?: string; pin?: string }) => Promise<void>;
 }) {
-  const { selectedLoginProfileId, selectedLoginProfile, authPassword, onLoadUserProfile } = params;
+  const {
+    authRole,
+    adminProfile,
+    authPin,
+    selectedLoginProfileId,
+    selectedLoginProfile,
+    authPassword,
+    onLoadUserProfile,
+  } = params;
+
+  if (authRole === 'admin') {
+    if (!adminProfile) {
+      showToast('Admin profile is unavailable');
+      return;
+    }
+
+    await onLoadUserProfile({ profileId: adminProfile.id, pin: authPin });
+    return;
+  }
 
   if (!selectedLoginProfileId) {
     showToast('Choose a profile first');
@@ -26,53 +46,28 @@ export async function loginSubmit(params: {
 
 export async function signupSubmit(params: {
   authRole: UserRole;
-  authSignupType: UserAuthType;
-  authPin: string;
   authName: string;
-  authFaceIdName: string;
   authPassword: string;
-  onCreateFaceIdUserProfile: (params: {
-    role: UserRole;
-    pin?: string;
-    name: string;
-    faceIdName: string;
-  }) => Promise<void>;
   onCreatePasswordUserProfile: (params: {
     role: UserRole;
-    pin?: string;
     name: string;
     password: string;
   }) => Promise<void>;
 }) {
   const {
     authRole,
-    authSignupType,
-    authPin,
     authName,
-    authFaceIdName,
     authPassword,
-    onCreateFaceIdUserProfile,
     onCreatePasswordUserProfile,
   } = params;
 
-  if (authRole === 'admin' && !ADMIN_SIGNUP_ENABLED) {
-    showToast('New admin account creation is disabled');
-    return;
-  }
-
-  if (authRole === 'admin' && authSignupType === 'faceid') {
-    await onCreateFaceIdUserProfile({
-      role: 'admin',
-      pin: authPin,
-      name: authName,
-      faceIdName: authFaceIdName || authName,
-    });
+  if (authRole === 'admin') {
+    showToast('Admin accounts use the shared PIN and cannot be created here');
     return;
   }
 
   await onCreatePasswordUserProfile({
     role: authRole,
-    pin: authRole === 'admin' ? authPin : undefined,
     name: authName,
     password: authPassword,
   });

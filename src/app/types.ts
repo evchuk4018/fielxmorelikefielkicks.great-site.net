@@ -15,7 +15,7 @@ export type EventTab =
 
 export type FaceIdMode = 'train' | 'test';
 
-export type UserAuthType = 'password' | 'faceid';
+export type UserAuthType = 'password' | 'faceid' | 'pin';
 
 export type UserProfile = {
   id: string;
@@ -24,6 +24,8 @@ export type UserProfile = {
   authType: UserAuthType;
   passwordHash?: string;
   passwordSalt?: string;
+  pinHash?: string;
+  pinSalt?: string;
   faceIdName?: string;
   bannedAt?: string | null;
   bannedReason?: string | null;
@@ -38,6 +40,8 @@ export type UserProfileRow = {
   auth_type: UserAuthType;
   password_hash: string | null;
   password_salt: string | null;
+  pin_hash: string | null;
+  pin_salt: string | null;
   face_id_name: string | null;
   banned_at: string | null;
   banned_reason: string | null;

@@ -1,7 +1,6 @@
 import React from 'react';
 import { UserRole } from '../../types';
-import { ADMIN_SIGNUP_ENABLED } from '../constants';
-import { UserAuthType, UserProfile } from '../types';
+import { UserProfile } from '../types';
 
 type AuthenticationGateProps = {
   authMode: 'login' | 'signup';
@@ -14,15 +13,10 @@ type AuthenticationGateProps = {
   setAuthPassword: React.Dispatch<React.SetStateAction<string>>;
   authPin: string;
   setAuthPin: React.Dispatch<React.SetStateAction<string>>;
-  authSignupType: UserAuthType;
-  setAuthSignupType: React.Dispatch<React.SetStateAction<UserAuthType>>;
-  authFaceIdName: string;
-  setAuthFaceIdName: React.Dispatch<React.SetStateAction<string>>;
   selectedLoginProfileId: string;
   setSelectedLoginProfileId: React.Dispatch<React.SetStateAction<string>>;
   loginProfiles: UserProfile[];
   selectedLoginProfile: UserProfile | null;
-  isFaceIdBusy: boolean;
   onLoginSubmit: () => Promise<void>;
   onSignupSubmit: () => Promise<void>;
 };
@@ -39,22 +33,15 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
     setAuthPassword,
     authPin,
     setAuthPin,
-    authSignupType,
-    setAuthSignupType,
-    authFaceIdName,
-    setAuthFaceIdName,
     selectedLoginProfileId,
     setSelectedLoginProfileId,
     loginProfiles,
     selectedLoginProfile,
-    isFaceIdBusy,
     onLoginSubmit,
     onSignupSubmit,
   } = props;
 
-  const isAdminSignupLocked = authMode === 'signup' && !ADMIN_SIGNUP_ENABLED;
-  const signupRole: UserRole = isAdminSignupLocked ? 'scout' : authRole;
-  const showAdminSignupFields = signupRole === 'admin';
+  const isAdminLogin = authMode === 'login' && authRole === 'admin';
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4 sm:p-8">
@@ -62,7 +49,7 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
         <div className="space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Sign in to Scout</h1>
           <p className="text-sm text-slate-300">
-            Login is required. Scouts use name + password only. Admins can use password or Face ID.
+            Scouts use a profile name and password. Admins sign in with the shared PIN.
           </p>
         </div>
 
@@ -71,6 +58,7 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
             onClick={() => {
               setAuthMode('login');
               setAuthPassword('');
+              setAuthPin('');
             }}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               authMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
@@ -82,12 +70,8 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
             onClick={() => {
               setAuthMode('signup');
               setAuthPassword('');
-              if (!ADMIN_SIGNUP_ENABLED) {
-                setAuthRole('scout');
-                setAuthSignupType('password');
-                setAuthPin('');
-                setAuthFaceIdName('');
-              }
+              setAuthRole('scout');
+              setAuthPin('');
             }}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               authMode === 'signup' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'
@@ -101,7 +85,6 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
           <button
             onClick={() => {
               setAuthRole('scout');
-              setAuthSignupType('password');
             }}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               authRole === 'scout' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'
@@ -111,12 +94,12 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
           </button>
           <button
             onClick={() => {
-              if (isAdminSignupLocked) {
+              if (authMode === 'signup') {
                 return;
               }
               setAuthRole('admin');
             }}
-            disabled={isAdminSignupLocked}
+            disabled={authMode === 'signup'}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               authRole === 'admin' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:bg-slate-800'
             } disabled:cursor-not-allowed disabled:opacity-50`}
@@ -125,31 +108,45 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
           </button>
         </div>
 
-        {isAdminSignupLocked && (
+        {authMode === 'signup' && (
           <p className="text-xs text-amber-300">
-            New admin account creation is disabled. Existing admins can still log in.
+            Admin accounts are seeded and use the shared PIN. Only scout accounts can be created here.
           </p>
         )}
 
         {authMode === 'login' ? (
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-300">
-              Profile
-              <select
-                value={selectedLoginProfileId}
-                onChange={(event) => setSelectedLoginProfileId(event.target.value)}
-                className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
-              >
-                <option value="">Select profile...</option>
-                {loginProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name} ({profile.authType})
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!isAdminLogin && (
+              <label className="block text-sm font-medium text-slate-300">
+                Profile
+                <select
+                  value={selectedLoginProfileId}
+                  onChange={(event) => setSelectedLoginProfileId(event.target.value)}
+                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
+                >
+                  <option value="">Select profile...</option>
+                  {loginProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} ({profile.authType})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-            {selectedLoginProfile?.authType === 'password' && (
+            {isAdminLogin ? (
+              <label className="block text-sm font-medium text-slate-300">
+                Admin PIN
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="current-password"
+                  value={authPin}
+                  onChange={(event) => setAuthPin(event.target.value)}
+                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
+                />
+              </label>
+            ) : selectedLoginProfile?.authType === 'password' && (
               <label className="block text-sm font-medium text-slate-300">
                 Password
                 <input
@@ -165,10 +162,9 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
               onClick={() => {
                 void onLoginSubmit();
               }}
-              disabled={isFaceIdBusy}
               className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {selectedLoginProfile?.authType === 'faceid' ? 'Login with Face ID' : 'Login'}
+              {isAdminLogin ? 'Sign in as Admin' : 'Login'}
             </button>
           </div>
         ) : (
@@ -183,65 +179,23 @@ export function AuthenticationGate(props: AuthenticationGateProps) {
               />
             </label>
 
-            {showAdminSignupFields && (
-              <label className="block text-sm font-medium text-slate-300">
-                Admin Invite PIN
-                <input
-                  type="password"
-                  value={authPin}
-                  onChange={(event) => setAuthPin(event.target.value)}
-                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
-                />
-              </label>
-            )}
-
-            {showAdminSignupFields && (
-              <label className="block text-sm font-medium text-slate-300">
-                Auth Type
-                <select
-                  value={authSignupType}
-                  onChange={(event) => setAuthSignupType(event.target.value as UserAuthType)}
-                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
-                >
-                  <option value="password">Password</option>
-                  <option value="faceid">Face ID</option>
-                </select>
-              </label>
-            )}
-
-            {(signupRole === 'scout' || authSignupType === 'password') && (
-              <label className="block text-sm font-medium text-slate-300">
-                Password
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
-                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
-                />
-              </label>
-            )}
-
-            {showAdminSignupFields && authSignupType === 'faceid' && (
-              <label className="block text-sm font-medium text-slate-300">
-                Face ID Name
-                <input
-                  type="text"
-                  value={authFaceIdName}
-                  onChange={(event) => setAuthFaceIdName(event.target.value)}
-                  placeholder={authName || 'Face ID profile name'}
-                  className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
-                />
-              </label>
-            )}
+            <label className="block text-sm font-medium text-slate-300">
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                className="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none"
+              />
+            </label>
 
             <button
               onClick={() => {
                 void onSignupSubmit();
               }}
-              disabled={isFaceIdBusy}
               className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {showAdminSignupFields ? 'Create Admin Account' : 'Create Scout Account'}
+              Create Scout Account
             </button>
           </div>
         )}

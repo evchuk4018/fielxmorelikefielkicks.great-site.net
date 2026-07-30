@@ -16,6 +16,8 @@ function mapUserProfileRow(row: UserProfileRow): UserProfile {
     authType: row.auth_type,
     passwordHash: row.password_hash || undefined,
     passwordSalt: row.password_salt || undefined,
+    pinHash: row.pin_hash || undefined,
+    pinSalt: row.pin_salt || undefined,
     faceIdName: row.face_id_name || undefined,
     bannedAt: row.banned_at,
     bannedReason: row.banned_reason,
@@ -32,6 +34,8 @@ function mapUserProfileToRow(profile: UserProfile) {
     auth_type: profile.authType,
     password_hash: profile.passwordHash || null,
     password_salt: profile.passwordSalt || null,
+    pin_hash: profile.pinHash || null,
+    pin_salt: profile.pinSalt || null,
     face_id_name: profile.faceIdName || null,
     banned_at: profile.bannedAt || null,
     banned_reason: profile.bannedReason || null,
@@ -75,7 +79,7 @@ export async function getStoredUserProfiles(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from(USER_PROFILES_TABLE)
     .select(
-      'id, name, role, auth_type, password_hash, password_salt, face_id_name, banned_at, banned_reason, banned_by_profile_id, created_at'
+      'id, name, role, auth_type, password_hash, password_salt, pin_hash, pin_salt, face_id_name, banned_at, banned_reason, banned_by_profile_id, created_at'
     )
     .order('created_at', { ascending: true });
 

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { CompetitionProfile, UserRole } from '../../types';
-import { EventTab, FaceIdMode, Location, PendingFaceIdAction, UserAuthType, UserProfile } from '../types';
+import { EventTab, Location, UserProfile } from '../types';
 
 export function useAppState() {
   const [location, setLocation] = useState<Location>('home');
@@ -10,8 +10,6 @@ export function useAppState() {
   const [activeProfile, setActiveProfile] = useState<CompetitionProfile | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
-  const [faceIdMode, setFaceIdMode] = useState<FaceIdMode | null>(null);
-  const [isFaceIdBusy, setIsFaceIdBusy] = useState(false);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [signedInUserProfileId, setSignedInUserProfileId] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -19,16 +17,12 @@ export function useAppState() {
   const [authName, setAuthName] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authPin, setAuthPin] = useState('');
-  const [authSignupType, setAuthSignupType] = useState<UserAuthType>('password');
-  const [authFaceIdName, setAuthFaceIdName] = useState('');
   const [selectedLoginProfileId, setSelectedLoginProfileId] = useState<string>('');
-  const [pendingFaceIdAction, setPendingFaceIdAction] = useState<PendingFaceIdAction>(null);
 
   const resetAuthInputs = useCallback(() => {
     setAuthName('');
     setAuthPassword('');
     setAuthPin('');
-    setAuthFaceIdName('');
   }, []);
 
   return {
@@ -46,10 +40,6 @@ export function useAppState() {
     setIsCreatingProfile,
     isLoadingProfiles,
     setIsLoadingProfiles,
-    faceIdMode,
-    setFaceIdMode,
-    isFaceIdBusy,
-    setIsFaceIdBusy,
     userProfiles,
     setUserProfiles,
     signedInUserProfileId,
@@ -64,14 +54,8 @@ export function useAppState() {
     setAuthPassword,
     authPin,
     setAuthPin,
-    authSignupType,
-    setAuthSignupType,
-    authFaceIdName,
-    setAuthFaceIdName,
     selectedLoginProfileId,
     setSelectedLoginProfileId,
-    pendingFaceIdAction,
-    setPendingFaceIdAction,
     resetAuthInputs,
   };
 }

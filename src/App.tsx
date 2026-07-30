@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect } from 'react';
 import { SettingsModal } from './components/SettingsModal';
-import { FaceIdCaptureModal } from './components/FaceIdCaptureModal';
 import { ToastProvider } from './components/Toast';
 import { UserRole } from './types';
 import { AuthenticationGate } from './app/components/AuthenticationGate';
 import { EventNavigation } from './app/components/EventNavigation';
 import { PageContent } from './app/components/PageContent';
-import { createFaceIdUserProfile, createPasswordUserProfile, loadUserProfile, signOutUserProfile } from './app/auth/actions';
-import { completeFaceIdAction } from './app/auth/faceIdActions';
+import { createPasswordUserProfile, loadUserProfile, signOutUserProfile } from './app/auth/actions';
 import { clearStoredActiveUserProfileId, getStoredUserProfiles } from './app/auth/profileStorage';
 import { loginSubmit, signupSubmit } from './app/handlers/authSubmitHandlers';
 import { banScout, unbanScout } from './app/handlers/moderationHandlers';
@@ -19,10 +17,6 @@ import { useRouteGuards } from './app/hooks/useRouteGuards';
 import { useUserProfilePolling } from './app/hooks/useUserProfilePolling';
 import { GLOBAL_MATCH_DATA_ADMIN_IDS, SCOUT_DEFAULT_EVENT_KEY } from './app/constants';
 import { PrescoutingQuickScoutTarget, setPendingPrescoutingQuickScout } from './prescouting/quickScout';
-import {
-  FaceIdMode,
-} from './app/types';
-
 const GLOBAL_MATCH_DATA_ADMIN_ID_SET = new Set<string>(GLOBAL_MATCH_DATA_ADMIN_IDS);
 
 export default function App() {
@@ -41,10 +35,6 @@ export default function App() {
     setIsCreatingProfile,
     isLoadingProfiles,
     setIsLoadingProfiles,
-    faceIdMode,
-    setFaceIdMode,
-    isFaceIdBusy,
-    setIsFaceIdBusy,
     userProfiles,
     setUserProfiles,
     signedInUserProfileId,
@@ -59,14 +49,8 @@ export default function App() {
     setAuthPassword,
     authPin,
     setAuthPin,
-    authSignupType,
-    setAuthSignupType,
-    authFaceIdName,
-    setAuthFaceIdName,
     selectedLoginProfileId,
     setSelectedLoginProfileId,
-    pendingFaceIdAction,
-    setPendingFaceIdAction,
     resetAuthInputs,
   } = useAppState();
 
@@ -98,6 +82,7 @@ export default function App() {
   const signedInUserProfile = userProfiles.find((profile) => profile.id === signedInUserProfileId) || null;
   const isAdminSignedIn = signedInUserProfile?.role === 'admin';
   const isScoutSignedIn = signedInUserProfile?.role === 'scout';
+  const adminProfile = userProfiles.find((profile) => profile.id === 'admin' && profile.role === 'admin') || null;
   const canAccessGlobalMatchData = Boolean(
     signedInUserProfile && isAdminSignedIn && GLOBAL_MATCH_DATA_ADMIN_ID_SET.has(signedInUserProfile.id),
   );
@@ -175,13 +160,11 @@ export default function App() {
 
   const handleCreatePasswordUserProfile = async (params: {
     role: UserRole;
-    pin?: string;
     name: string;
     password: string;
   }) => {
     await createPasswordUserProfile({
       ...params,
-      isFaceIdBusy,
       userProfiles,
       setUserProfiles,
       setSignedInUserProfileId,
@@ -189,32 +172,12 @@ export default function App() {
     });
   };
 
-  const handleCreateFaceIdUserProfile = async (params: {
-    role: UserRole;
-    pin?: string;
-    name: string;
-    faceIdName: string;
-  }) => {
-    await createFaceIdUserProfile({
-      ...params,
-      isFaceIdBusy,
-      userProfiles,
-      setPendingFaceIdAction,
-      setIsSettingsOpen,
-      setFaceIdMode,
-    });
-  };
-
-  const handleLoadUserProfile = async (params: { profileId: string; password?: string }) => {
+  const handleLoadUserProfile = async (params: { profileId: string; password?: string; pin?: string }) => {
     await loadUserProfile({
       ...params,
       authRole,
-      isFaceIdBusy,
       userProfiles,
       setSignedInUserProfileId,
-      setPendingFaceIdAction,
-      setIsSettingsOpen,
-      setFaceIdMode,
       resetAuthInputs,
     });
   };
@@ -285,6 +248,9 @@ export default function App() {
 
   const handleLoginSubmit = async () => {
     await loginSubmit({
+      authRole,
+      adminProfile,
+      authPin,
       selectedLoginProfileId,
       selectedLoginProfile,
       authPassword,
@@ -295,35 +261,9 @@ export default function App() {
   const handleSignupSubmit = async () => {
     await signupSubmit({
       authRole,
-      authSignupType,
-      authPin,
       authName,
-      authFaceIdName,
       authPassword,
-      onCreateFaceIdUserProfile: handleCreateFaceIdUserProfile,
       onCreatePasswordUserProfile: handleCreatePasswordUserProfile,
-    });
-  };
-
-  const handleFaceIdComplete = async (payload: {
-    mode: FaceIdMode;
-    personName: string;
-    embedding: number[];
-    acceptedFrames: number;
-    qualityScore: number;
-    snapshots: Blob[];
-  }) => {
-    await completeFaceIdAction({
-      payload,
-      pendingFaceIdAction,
-      activeProfile,
-      userProfiles,
-      setUserProfiles,
-      setSignedInUserProfileId,
-      setIsFaceIdBusy,
-      setPendingFaceIdAction,
-      setFaceIdMode,
-      refreshUserProfiles,
     });
   };
 
@@ -341,15 +281,10 @@ export default function App() {
           setAuthPassword={setAuthPassword}
           authPin={authPin}
           setAuthPin={setAuthPin}
-          authSignupType={authSignupType}
-          setAuthSignupType={setAuthSignupType}
-          authFaceIdName={authFaceIdName}
-          setAuthFaceIdName={setAuthFaceIdName}
           selectedLoginProfileId={selectedLoginProfileId}
           setSelectedLoginProfileId={setSelectedLoginProfileId}
           loginProfiles={loginProfiles}
           selectedLoginProfile={selectedLoginProfile}
-          isFaceIdBusy={isFaceIdBusy}
           onLoginSubmit={handleLoginSubmit}
           onSignupSubmit={handleSignupSubmit}
         />
@@ -405,18 +340,8 @@ export default function App() {
                 ? { name: signedInUserProfile.name, authType: signedInUserProfile.authType }
                 : null
             }
-            isProfileActionBusy={isFaceIdBusy}
           />
         </>
-      )}
-
-      {faceIdMode && (
-        <FaceIdCaptureModal
-          isOpen={Boolean(faceIdMode)}
-          mode={faceIdMode}
-          onClose={() => setFaceIdMode(null)}
-          onComplete={handleFaceIdComplete}
-        />
       )}
       <ToastProvider />
     </div>

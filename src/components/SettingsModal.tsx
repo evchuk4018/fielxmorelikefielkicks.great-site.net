@@ -9,7 +9,7 @@ interface SettingsModalProps {
   activeProfile: CompetitionProfile | null;
   onBackToEvents: () => void;
   onSignOutUserProfile: () => void;
-  signedInUserProfile: { name: string; authType: 'password' | 'faceid' } | null;
+  signedInUserProfile: { name: string; authType: 'password' | 'faceid' | 'pin' } | null;
   isProfileActionBusy?: boolean;
 }
 

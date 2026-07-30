@@ -95,9 +95,11 @@ create table if not exists public.admin_user_profiles (
   id text primary key,
   name text not null,
   role text not null default 'admin' check (role in ('admin', 'scout')),
-  auth_type text not null check (auth_type in ('password', 'faceid')),
+  auth_type text not null check (auth_type in ('password', 'faceid', 'pin')),
   password_hash text,
   password_salt text,
+  pin_hash text,
+  pin_salt text,
   face_id_name text,
   banned_at timestamptz,
   banned_reason text,
@@ -117,16 +119,67 @@ add column if not exists banned_reason text;
 alter table public.admin_user_profiles
 add column if not exists banned_by_profile_id text references public.admin_user_profiles(id) on delete set null;
 
+alter table public.admin_user_profiles
+add column if not exists pin_hash text;
+
+alter table public.admin_user_profiles
+add column if not exists pin_salt text;
+
+-- Existing deployments were created with only password and Face ID auth types.
+alter table public.admin_user_profiles
+drop constraint if exists admin_user_profiles_auth_type_check;
+
+alter table public.admin_user_profiles
+add constraint admin_user_profiles_auth_type_check
+check (auth_type in ('password', 'faceid', 'pin'));
+
 -- Keep only explicit allowlisted admin profiles.
 -- Scout profiles are always preserved.
 delete from public.admin_user_profiles
 where role = 'admin'
-  and id not in (
-    'user-61f5a021-6171-4582-a80b-31144642e435',
-    'user-ad20a508-d1be-4ea2-8779-b8e89cc06c28',
-    'user-ba5c3752-9807-4887-a751-c42e76f24488',
-    'user-2ec66bfc-bded-482b-831c-03e1b8e6ab09'
-  );
+  and id <> 'admin';
+
+-- Canonical PIN-only administrator. The hash is PBKDF2-SHA256(4230,
+-- "admin-pin-v1", 600000 iterations, 32 bytes).
+insert into public.admin_user_profiles (
+  id,
+  name,
+  role,
+  auth_type,
+  password_hash,
+  password_salt,
+  pin_hash,
+  pin_salt,
+  face_id_name,
+  banned_at,
+  banned_reason,
+  banned_by_profile_id
+)
+values (
+  'admin',
+  'Admin',
+  'admin',
+  'pin',
+  null,
+  null,
+  '010b961b62dcef0a0644802fbcdd3c70f705e1d755a43a9e4f558479b44dc89c',
+  '61646d696e2d70696e2d7631',
+  null,
+  null,
+  null
+)
+on conflict (id) do update set
+  name = excluded.name,
+  role = excluded.role,
+  auth_type = excluded.auth_type,
+  password_hash = excluded.password_hash,
+  password_salt = excluded.password_salt,
+  pin_hash = excluded.pin_hash,
+  pin_salt = excluded.pin_salt,
+  face_id_name = excluded.face_id_name,
+  banned_at = null,
+  banned_reason = null,
+  banned_by_profile_id = null;
 
 create table if not exists public.scout_assignments (
   id text primary key,
@@ -400,12 +453,7 @@ to authenticated
 using (true)
 with check (
   role = 'scout'
-  or id in (
-    'user-61f5a021-6171-4582-a80b-31144642e435',
-    'user-ad20a508-d1be-4ea2-8779-b8e89cc06c28',
-    'user-ba5c3752-9807-4887-a751-c42e76f24488',
-    'user-2ec66bfc-bded-482b-831c-03e1b8e6ab09'
-  )
+  or id = 'admin'
 );
 
 drop policy if exists "anon_rw_admin_user_profiles" on public.admin_user_profiles;
@@ -416,12 +464,7 @@ to anon
 using (true)
 with check (
   role = 'scout'
-  or id in (
-    'user-61f5a021-6171-4582-a80b-31144642e435',
-    'user-ad20a508-d1be-4ea2-8779-b8e89cc06c28',
-    'user-ba5c3752-9807-4887-a751-c42e76f24488',
-    'user-2ec66bfc-bded-482b-831c-03e1b8e6ab09'
-  )
+  or id = 'admin'
 );
 
 drop policy if exists "authenticated_rw_admin_user_state" on public.admin_user_state;
