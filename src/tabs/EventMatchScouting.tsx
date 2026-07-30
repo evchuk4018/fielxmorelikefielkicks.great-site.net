@@ -3,9 +3,11 @@ import { compLevelSortOrder, formatMatchLabel, toTeamNumber } from '../lib/match
 import { tba } from '../lib/tba';
 import { getMatchScoutStorageKeyCandidates, storage } from '../lib/storage';
 import { listAssignmentsForScout, markAssignmentCompleted } from '../lib/supabase';
-import { AutonPathData, AutonShotAttempt, CompetitionProfile, DefenseQuality, MatchScoutData, ScoutAssignment, TBAMatch, TBATeam } from '../types';
+import { AutonPathData, AutonShotAttempt, CompetitionProfile, DefenseQuality, MatchScoutData, PitAnswer, ScoutAssignment, TBAMatch, TBATeam } from '../types';
 import { MatchScoutingFormState, MatchScoutingSections } from '../components/MatchScoutingSections';
+import { MatchQuestionnaire } from '../components/MatchQuestionnaire';
 import { showToast } from '../components/Toast';
+import { useSeasonConfiguration } from '../app/hooks/useSeasonConfiguration';
 
 type AllianceColor = 'Red' | 'Blue';
 
@@ -35,6 +37,7 @@ type Props = {
 };
 
 export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId, scoutProfileId }: Props) {
+  const { configuration: seasonConfiguration } = useSeasonConfiguration();
   const [matches, setMatches] = useState<TBAMatch[]>([]);
   const [teamNameByNumber, setTeamNameByNumber] = useState<Map<number, string>>(new Map());
   const [assignments, setAssignments] = useState<ScoutAssignment[]>([]);
@@ -44,6 +47,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   const [error, setError] = useState<string | null>(null);
 
   const [formState, setFormState] = useState<MatchScoutingFormState>(EMPTY_FORM);
+  const [matchAnswers, setMatchAnswers] = useState<Record<string, PitAnswer>>({});
 
   // Use a ref so autoSave can always access current form values without stale closures
   const formRef = useRef<MatchScoutingFormState>(EMPTY_FORM);
@@ -213,12 +217,14 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
   useEffect(() => {
     setSelectedTeamNumber('');
     setFormState(EMPTY_FORM);
+    setMatchAnswers({});
   }, [selectedMatchKey]);
 
   // Load saved data when team selection changes
   useEffect(() => {
     if (!selectedMatch || selectedTeamNumber === '') {
       setFormState(EMPTY_FORM);
+      setMatchAnswers({});
       return;
     }
 
@@ -241,8 +247,10 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
         defenseNotes: d.defenseNotes || '',
         notes: d.notes || '',
       });
+      setMatchAnswers(d.answers || {});
     } else {
       setFormState(EMPTY_FORM);
+      setMatchAnswers({});
     }
   }, [selectedTeamNumber, selectedMatch]);
 
@@ -267,6 +275,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
       matchNumber: selectedMatch.match_number,
       teamNumber: selectedTeamNumber as number,
       allianceColor: getAllianceColor(),
+      answers: matchAnswers,
       leftStartingZone: false,
       autoFuelScored: 0,
       autoClimbAttempted: false,
@@ -331,6 +340,7 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
     );
     setSelectedTeamNumber('');
     setFormState(EMPTY_FORM);
+    setMatchAnswers({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -431,6 +441,12 @@ export function EventMatchScouting({ activeProfile, isAdminScout, adminProfileId
           </select>
         </div>
       </div>
+
+      <MatchQuestionnaire
+        questions={seasonConfiguration.matchQuestions}
+        answers={matchAnswers}
+        onChange={(key, value) => setMatchAnswers((current) => ({ ...current, [key]: value }))}
+      />
 
       <MatchScoutingSections
         readyToScout={readyToScout}

@@ -213,14 +213,6 @@ create table if not exists public.prescouting_settings (
   created_at timestamptz not null default now()
 );
 
--- Preserve the existing 2026 Prescouting roster while moving ownership to Settings.
-insert into public.prescouting_settings (season_year, team_numbers)
-values (
-  2026,
-  '[341, 316, 8513, 2607, 1403, 103, 9094, 1218, 5895, 2590, 1391, 5181, 272, 3637, 11, 1676, 484, 2539, 1923, 8706, 9015, 1640, 3314, 433, 1672, 56, 555, 293, 6921, 486, 7045, 222, 7587, 193, 708, 5401, 10949, 4285, 7110, 1168, 1089, 423, 25, 223, 10157, 5438, 5789, 10400, 427, 303, 10584, 10979, 5732, 1807, 365, 2016, 1811, 1712, 9416, 10070, 10993, 75, 4575, 41, 9027, 10918]'::jsonb
-)
-on conflict (season_year) do nothing;
-
 create table if not exists public.admin_user_state (
   id text primary key,
   active_user_profile_id text references public.admin_user_profiles(id) on delete set null
@@ -247,6 +239,24 @@ create table if not exists public.pit_question_definitions (
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.season_configurations (
+  id text primary key check (id = 'default'),
+  season_year integer not null check (season_year > 0),
+  default_event_key text,
+  brand_name text not null default 'FRC Scout',
+  game_name text not null default 'Season Scouting',
+  match_questions jsonb not null default '[]'::jsonb check (jsonb_typeof(match_questions) = 'array'),
+  alliance_filters jsonb not null default '[]'::jsonb check (jsonb_typeof(alliance_filters) = 'array'),
+  scoring_rules jsonb not null default '[]'::jsonb check (jsonb_typeof(scoring_rules) = 'array'),
+  analytics_metrics jsonb not null default '[]'::jsonb check (jsonb_typeof(analytics_metrics) = 'array'),
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+alter table public.season_configurations
+add column if not exists analytics_metrics jsonb not null default '[]'::jsonb
+check (jsonb_typeof(analytics_metrics) = 'array');
 
 alter table public.match_scouts
 add column if not exists previous_team_ranking text;
@@ -282,6 +292,7 @@ create index if not exists idx_prescouting_settings_updated_at on public.prescou
 create index if not exists idx_field_map_settings_updated_at on public.field_map_settings (updated_at desc);
 create index if not exists idx_pit_question_definitions_order on public.pit_question_definitions (display_order asc);
 create index if not exists idx_pit_question_definitions_archived on public.pit_question_definitions (archived);
+create index if not exists idx_season_configurations_updated_at on public.season_configurations (updated_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -347,6 +358,12 @@ before update on public.pit_question_definitions
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_season_configurations_updated_at on public.season_configurations;
+create trigger set_season_configurations_updated_at
+before update on public.season_configurations
+for each row
+execute function public.set_updated_at();
+
 alter table public.pit_scouts enable row level security;
 alter table public.match_scouts enable row level security;
 alter table public.face_id_enrollments enable row level security;
@@ -358,6 +375,7 @@ alter table public.prescouting_team_claims enable row level security;
 alter table public.prescouting_settings enable row level security;
 alter table public.field_map_settings enable row level security;
 alter table public.pit_question_definitions enable row level security;
+alter table public.season_configurations enable row level security;
 
 -- Remove any previously-created admin_user_profiles policies (including legacy recursive ones)
 -- so policy state is deterministic across environments before recreating known-safe policies.
@@ -597,6 +615,22 @@ with check (true);
 drop policy if exists "anon_rw_pit_question_definitions" on public.pit_question_definitions;
 create policy "anon_rw_pit_question_definitions"
 on public.pit_question_definitions
+for all
+to anon
+using (true)
+with check (true);
+
+drop policy if exists "authenticated_rw_season_configurations" on public.season_configurations;
+create policy "authenticated_rw_season_configurations"
+on public.season_configurations
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "anon_rw_season_configurations" on public.season_configurations;
+create policy "anon_rw_season_configurations"
+on public.season_configurations
 for all
 to anon
 using (true)

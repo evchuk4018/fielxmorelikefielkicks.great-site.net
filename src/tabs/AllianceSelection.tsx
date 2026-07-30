@@ -6,7 +6,9 @@ import { getPitAnswer, hasPitAnswerValue, loadPitQuestionDefinitions } from '../
 import { storage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { tba } from '../lib/tba';
-import { MatchScoutData, PitAnswer, PitQuestionDefinition, PitScoutData, SyncRecord, TBARanking, TBARankings, TBATeam } from '../types';
+import { AllianceFilterDefinition, MatchScoutData, PitAnswer, PitQuestionDefinition, PitScoutData, SyncRecord, TBARanking, TBARankings, TBATeam } from '../types';
+import { useSeasonConfiguration } from '../app/hooks/useSeasonConfiguration';
+import { getConfiguredScoringTotal } from '../lib/scoring';
 
 type AllianceSelectionProps = {
   eventKey: string;
@@ -37,6 +39,8 @@ type TeamNoteSummary = {
   canPlayDefense: boolean | null;
   defenseStyle: string | null;
   customPitAnswers: Array<{ key: string; label: string; value: PitAnswer }>;
+  pitAnswers: Record<string, PitAnswer>;
+  matchAnswers: Record<string, PitAnswer>;
 };
 
 type AllianceBoardRow = {
@@ -47,6 +51,7 @@ type AllianceBoardRow = {
   epaAuto: number | null;
   epaTeleop: number | null;
   epaEndgame: number | null;
+  configuredScore: number;
   notes: TeamNoteSummary;
 };
 
@@ -78,6 +83,7 @@ type PitSnapshot = {
   canPlayDefense: boolean | null;
   defenseStyle: string | null;
   customPitAnswers: Array<{ key: string; label: string; value: PitAnswer }>;
+  pitAnswers: Record<string, PitAnswer>;
 };
 
 type RankingMode = 'draft' | 'combined_epa' | 'auto_epa' | 'total_epa' | 'tba_rank';
@@ -225,6 +231,26 @@ function buildCustomPitAnswers(payload: unknown, definitions: PitQuestionDefinit
     .filter((answer): answer is { key: string; label: string; value: PitAnswer } => hasPitAnswerValue(answer.value));
 }
 
+function buildAnswerMap(payload: unknown, definitions: PitQuestionDefinition[] = []): Record<string, PitAnswer> {
+  const answers: Record<string, PitAnswer> = {};
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const rawAnswers = (payload as { answers?: unknown }).answers;
+    if (rawAnswers && typeof rawAnswers === 'object' && !Array.isArray(rawAnswers)) {
+      Object.entries(rawAnswers).forEach(([key, value]) => {
+        answers[key] = value as PitAnswer;
+      });
+    }
+  }
+
+  definitions.forEach((definition) => {
+    const value = getPitAnswer(payload, definition.key);
+    if (value !== undefined) {
+      answers[definition.key] = value;
+    }
+  });
+  return answers;
+}
+
 function displayPitAnswer(value: PitAnswer): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
@@ -332,6 +358,30 @@ function matchesPitFilters(row: AllianceBoardRow, filters: PitFilterState): bool
   );
 }
 
+function matchesConfiguredFilter(row: AllianceBoardRow, filter: AllianceFilterDefinition, value: string): boolean {
+  if (!value.trim()) {
+    return true;
+  }
+
+  const source = filter.source === 'pit' ? row.notes.pitAnswers : row.notes.matchAnswers;
+  const raw = source[filter.key];
+  if (filter.type === 'boolean') {
+    if (value === 'any') return true;
+    return raw === (value === 'yes');
+  }
+
+  if (filter.type === 'number') {
+    const number = toFiniteNumber(raw);
+    return number !== null && number === Number(value);
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.includes(value);
+  }
+
+  return String(raw ?? '').toLowerCase().includes(value.toLowerCase());
+}
+
 function buildPickedStorageKey(eventKey: string): string {
   return `allianceSelection:picked:${eventKey}`;
 }
@@ -391,6 +441,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
   const pitQuestionDefinitions = await loadPitQuestionDefinitions();
 
   const pitByTeam = new Map<number, PitSnapshot>();
+  const matchAnswersByTeam = new Map<number, { updatedAt: number; answers: Record<string, PitAnswer> }>();
   const matchLines: MatchNoteLine[] = [];
 
   const localPitPrefix = profileId ? `pitScout:${profileId}:` : 'pitScout:';
@@ -456,6 +507,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
         canPlayDefense,
         defenseStyle,
         customPitAnswers: buildCustomPitAnswers(payload, pitQuestionDefinitions),
+        pitAnswers: buildAnswerMap(payload, pitQuestionDefinitions),
       });
     }
   });
@@ -482,6 +534,8 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
       normalizeText(payload?.defenseNotes) ? `Defense: ${normalizeText(payload?.defenseNotes)}` : '',
       normalizeText(payload?.notes),
     ].filter((line) => line.length > 0);
+
+    matchAnswersByTeam.set(teamNumber, { updatedAt: record.timestamp, answers: buildAnswerMap(payload) });
 
     lines.forEach((text) => {
       matchLines.push({
@@ -555,6 +609,7 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
           canPlayDefense,
           defenseStyle,
           customPitAnswers: buildCustomPitAnswers(payload, pitQuestionDefinitions),
+          pitAnswers: buildAnswerMap(payload, pitQuestionDefinitions),
         });
       }
     });
@@ -586,6 +641,10 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
           updatedAt,
         });
       });
+      const existingAnswers = matchAnswersByTeam.get(teamNumber);
+      if (!existingAnswers || updatedAt >= existingAnswers.updatedAt) {
+        matchAnswersByTeam.set(teamNumber, { updatedAt, answers: buildAnswerMap(payload) });
+      }
     });
   }
 
@@ -626,6 +685,8 @@ async function buildTeamNoteSummaryMap(eventKey: string, profileId: string | nul
       canPlayDefense: pit?.canPlayDefense ?? null,
       defenseStyle: pit?.defenseStyle || null,
       customPitAnswers: pit?.customPitAnswers || [],
+      pitAnswers: pit?.pitAnswers || {},
+      matchAnswers: matchAnswersByTeam.get(teamNumber)?.answers || {},
     });
   });
 
@@ -663,6 +724,10 @@ function compareByDraftValue(a: AllianceBoardRow, b: AllianceBoardRow): number {
 
   if (aEpa === null && bEpa !== null) {
     return 1;
+  }
+
+  if (a.configuredScore !== b.configuredScore) {
+    return b.configuredScore - a.configuredScore;
   }
 
   if (a.tbaRank !== null && b.tbaRank !== null && a.tbaRank !== b.tbaRank) {
@@ -725,6 +790,11 @@ function formatEpa(value: number | null): string {
 }
 
 export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProps) {
+  const { configuration: seasonConfiguration } = useSeasonConfiguration();
+  const configuredAllianceFilters = useMemo(
+    () => seasonConfiguration.allianceFilters.filter((filter) => !filter.archived && filter.key.trim()),
+    [seasonConfiguration.allianceFilters],
+  );
   const normalizedEventKey = useMemo(() => normalizeEventKey(eventKey), [eventKey]);
   const pickedStorageKey = useMemo(() => (normalizedEventKey ? buildPickedStorageKey(normalizedEventKey) : ''), [normalizedEventKey]);
 
@@ -737,6 +807,17 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
   const [rankingMode, setRankingMode] = useState<RankingMode>('draft');
   const [expandedRawNotesTeams, setExpandedRawNotesTeams] = useState<Set<number>>(new Set());
   const [pitFilters, setPitFilters] = useState<PitFilterState>(INITIAL_PIT_FILTERS);
+  const [configuredFilterValues, setConfiguredFilterValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setConfiguredFilterValues((current) => {
+      const next: Record<string, string> = {};
+      configuredAllianceFilters.forEach((filter) => {
+        next[filter.key] = current[filter.key] || (filter.type === 'boolean' ? 'any' : '');
+      });
+      return next;
+    });
+  }, [configuredAllianceFilters]);
 
   useEffect(() => {
     if (!pickedStorageKey) {
@@ -873,6 +954,8 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
               canPlayDefense: null,
               defenseStyle: null,
               customPitAnswers: [],
+              pitAnswers: {},
+              matchAnswers: {},
             };
 
             return {
@@ -883,6 +966,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
               epaAuto: statRow ? toFiniteNumber(statRow.epa?.auto_points) : null,
               epaTeleop: statRow ? toFiniteNumber(statRow.epa?.teleop_points) : null,
               epaEndgame: statRow ? toFiniteNumber(statRow.epa?.endgame_points) : null,
+              configuredScore: getConfiguredScoringTotal(notes.matchAnswers, seasonConfiguration.scoringRules, notes.pitAnswers),
               notes,
             } as AllianceBoardRow;
           })
@@ -948,7 +1032,7 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
       window.removeEventListener('storage', onStorageChange);
       window.removeEventListener('pit-questions-updated', onQuestionnaireUpdated);
     };
-  }, [normalizedEventKey, pickedStorageKey, profileId, refreshToken]);
+  }, [normalizedEventKey, pickedStorageKey, profileId, refreshToken, seasonConfiguration.scoringRules]);
 
   const pickedSet = useMemo(() => new Set(pickedTeamNumbers), [pickedTeamNumbers]);
 
@@ -956,8 +1040,9 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
     return rows
       .filter((row) => !pickedSet.has(row.teamNumber))
       .filter((row) => matchesPitFilters(row, pitFilters))
+      .filter((row) => configuredAllianceFilters.every((filter) => matchesConfiguredFilter(row, filter, configuredFilterValues[filter.key] || '')))
       .sort((a, b) => compareByRankingMode(a, b, rankingMode));
-  }, [pickedSet, pitFilters, rankingMode, rows]);
+  }, [configuredAllianceFilters, configuredFilterValues, pickedSet, pitFilters, rankingMode, rows]);
 
   const pickedRows = useMemo(() => {
     return rows
@@ -1029,6 +1114,26 @@ export function AllianceSelection({ eventKey, profileId }: AllianceSelectionProp
           <summary className="cursor-pointer text-sm font-medium text-slate-200">
             Pit Scouting Filters (for 3rd-pick screening)
           </summary>
+
+          {configuredAllianceFilters.length > 0 && (
+            <div className="mt-3 rounded-lg border border-blue-500/30 bg-blue-950/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-200">Configured Filters</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {configuredAllianceFilters.map((filter) => (
+                  <label key={filter.key} className="space-y-1">
+                    <span className="text-xs text-slate-400">{filter.label}</span>
+                    {filter.type === 'boolean' ? (
+                      <select value={configuredFilterValues[filter.key] || 'any'} onChange={(event) => setConfiguredFilterValues((current) => ({ ...current, [filter.key]: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100">
+                        {BOOLEAN_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    ) : (
+                      <input type={filter.type === 'number' ? 'number' : 'text'} value={configuredFilterValues[filter.key] || ''} onChange={(event) => setConfiguredFilterValues((current) => ({ ...current, [filter.key]: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100" />
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <label className="space-y-1">

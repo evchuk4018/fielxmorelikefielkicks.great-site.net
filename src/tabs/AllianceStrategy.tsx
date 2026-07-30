@@ -701,7 +701,7 @@ export function AllianceStrategy({ eventKey, profileId }: AllianceStrategyProps)
 
       {!eventYear && (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
-          Could not derive season year from event key. Use an event key that starts with a 4-digit year (example: 2026paphi).
+          Could not derive season year from event key. Use an event key that starts with a 4-digit year (example: 20xxpaphi).
         </div>
       )}
 

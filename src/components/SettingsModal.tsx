@@ -4,14 +4,22 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFieldMap } from '../app/context/FieldMapContext';
 import { PitQuestionEditor } from './PitQuestionEditor';
+import { MatchConfigurationEditor } from './MatchConfigurationEditor';
 import { showToast } from './Toast';
-import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
 import {
   parsePrescoutingTeamNumbersInput,
   PRESCOUTING_TEAM_LIST_UPDATED_EVENT,
   savePrescoutingTeamNumbers,
 } from '../prescouting/teamSettingsRepository';
 import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
+import {
+  DEFAULT_SEASON_CONFIGURATION,
+  getCachedSeasonConfiguration,
+  loadSeasonConfiguration,
+  saveSeasonConfigurationAsAdmin,
+  SEASON_CONFIGURATION_UPDATED_EVENT,
+} from '../lib/seasonConfiguration';
+import { SeasonConfiguration } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -38,6 +46,10 @@ export function SettingsModal({
   const [prescoutingTeamInput, setPrescoutingTeamInput] = useState('');
   const [prescoutingSaveError, setPrescoutingSaveError] = useState<string | null>(null);
   const [isPrescoutingSaving, setIsPrescoutingSaving] = useState(false);
+  const [configuration, setConfiguration] = useState<SeasonConfiguration>(() => getCachedSeasonConfiguration() || DEFAULT_SEASON_CONFIGURATION);
+  const [isConfigurationLoading, setIsConfigurationLoading] = useState(() => !getCachedSeasonConfiguration());
+  const [isConfigurationSaving, setIsConfigurationSaving] = useState(false);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
   const { imageSrc, isLoading: isFieldMapLoading, isUploading, error: fieldMapError, uploadImage } = useFieldMap();
   const {
     teamNumbers: prescoutingTeamNumbers,
@@ -45,9 +57,42 @@ export function SettingsModal({
     error: prescoutingTeamsError,
     reload: reloadPrescoutingTeams,
   } = usePrescoutingTeamNumbers({
-    seasonYear: PRESCOUTING_SEASON_YEAR,
+    seasonYear: configuration.seasonYear,
     enabled: isOpen && isAdminSignedIn,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadSeasonConfiguration()
+      .then((loaded) => {
+        if (!cancelled) {
+          setConfiguration(loaded);
+          setConfigurationError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setConfigurationError(error instanceof Error ? error.message : 'Failed to load season configuration.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsConfigurationLoading(false);
+        }
+      });
+
+    const onConfigurationUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SeasonConfiguration>).detail;
+      if (detail) {
+        setConfiguration(detail);
+      }
+    };
+    window.addEventListener(SEASON_CONFIGURATION_UPDATED_EVENT, onConfigurationUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(SEASON_CONFIGURATION_UPDATED_EVENT, onConfigurationUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -85,7 +130,7 @@ export function SettingsModal({
     setPrescoutingSaveError(null);
     try {
       const saved = await savePrescoutingTeamNumbers({
-        seasonYear: PRESCOUTING_SEASON_YEAR,
+        seasonYear: configuration.seasonYear,
         teamNumbers: parsed.teamNumbers,
         isAdmin: isAdminSignedIn,
       });
@@ -99,6 +144,22 @@ export function SettingsModal({
       showToast(message);
     } finally {
       setIsPrescoutingSaving(false);
+    }
+  };
+
+  const handleConfigurationSave = async () => {
+    setIsConfigurationSaving(true);
+    setConfigurationError(null);
+    try {
+      const saved = await saveSeasonConfigurationAsAdmin(configuration);
+      setConfiguration(saved);
+      showToast('Season configuration saved');
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : 'Failed to save season configuration.';
+      setConfigurationError(message);
+      showToast(message);
+    } finally {
+      setIsConfigurationSaving(false);
     }
   };
 
@@ -141,10 +202,42 @@ export function SettingsModal({
                 </div>
               )}
 
+              <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Season Configuration</p>
+                    <p className="mt-1 text-xs text-slate-400">These settings apply to the entire database and are the only season changes needed from year to year.</p>
+                  </div>
+                  {isAdminSignedIn && <button type="button" onClick={() => void handleConfigurationSave()} disabled={isConfigurationLoading || isConfigurationSaving} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500">{isConfigurationSaving ? 'Saving...' : 'Save Season Configuration'}</button>}
+                </div>
+
+                {isConfigurationLoading && <p className="text-sm text-slate-400">Loading season configuration...</p>}
+                {configurationError && <p className="rounded-lg border border-rose-500/40 bg-rose-950/20 p-3 text-xs text-rose-200">{configurationError}</p>}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Season year</span>
+                    <input type="number" value={configuration.seasonYear} disabled={!isAdminSignedIn || isConfigurationSaving} onChange={(event) => setConfiguration({ ...configuration, seasonYear: Number(event.target.value) || 0 })} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                  </label>
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Default event key</span>
+                    <input type="text" value={configuration.defaultEventKey} disabled={!isAdminSignedIn || isConfigurationSaving} onChange={(event) => setConfiguration({ ...configuration, defaultEventKey: event.target.value.toLowerCase() })} placeholder="2027mrcmp" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-white" />
+                  </label>
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Brand name</span>
+                    <input type="text" value={configuration.brandName} disabled={!isAdminSignedIn || isConfigurationSaving} onChange={(event) => setConfiguration({ ...configuration, brandName: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                  </label>
+                  <label className="space-y-1 text-xs text-slate-400">
+                    <span>Game name</span>
+                    <input type="text" value={configuration.gameName} disabled={!isAdminSignedIn || isConfigurationSaving} onChange={(event) => setConfiguration({ ...configuration, gameName: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                  </label>
+                </div>
+              </div>
+
               {isAdminSignedIn && (
                 <div className="space-y-3 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
                   <div>
-                    <p className="text-sm font-semibold text-white">Prescouting Teams ({PRESCOUTING_SEASON_YEAR})</p>
+                    <p className="text-sm font-semibold text-white">Prescouting Teams ({configuration.seasonYear})</p>
                     <p className="text-xs text-slate-400 mt-1">
                       Enter one team number per line. Blank lines are ignored, duplicates are removed, and an empty list is allowed.
                     </p>
@@ -246,6 +339,8 @@ export function SettingsModal({
               </div>
 
               <PitQuestionEditor isAdminSignedIn={isAdminSignedIn} />
+
+              <MatchConfigurationEditor configuration={configuration} isAdminSignedIn={isAdminSignedIn} onChange={setConfiguration} />
 
               <div className="space-y-2 border border-slate-700 bg-slate-800/40 rounded-xl p-4">
                 <p className="text-sm font-semibold text-white">Signed-in User</p>

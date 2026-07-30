@@ -11,7 +11,7 @@ import { PrescoutingCoverage } from '../../tabs/PrescoutingCoverage.tsx';
 import { PrescoutingMatchScouting } from '../../tabs/PrescoutingMatchScouting.tsx';
 import { AdminGlobalMatchData } from '../../tabs/AdminGlobalMatchData.tsx';
 import { PrescoutingQuickScoutTarget } from '../../prescouting/quickScout';
-import { CompetitionProfile } from '../../types';
+import { CompetitionProfile, SeasonConfiguration } from '../../types';
 import { EventTab, Location, UserProfile } from '../types';
 
 type PageContentProps = {
@@ -24,6 +24,7 @@ type PageContentProps = {
   activeTab: EventTab;
   profiles: CompetitionProfile[];
   activeProfile: CompetitionProfile | null;
+  seasonConfiguration: SeasonConfiguration;
   isCreatingProfile: boolean;
   userProfiles: UserProfile[];
   onCreateProfile: () => Promise<void>;
@@ -32,6 +33,7 @@ type PageContentProps = {
   onUnbanScout: (scoutProfileId: string) => Promise<void>;
   onOpenPrescouting: () => void;
   onOpenGlobalMatchData: () => void;
+  onOpenSettings: () => void;
   onPrescoutingQuickScout: (target: PrescoutingQuickScoutTarget) => void;
 };
 
@@ -63,6 +65,7 @@ export function PageContent(props: PageContentProps) {
     activeTab,
     profiles,
     activeProfile,
+    seasonConfiguration,
     isCreatingProfile,
     userProfiles,
     onCreateProfile,
@@ -71,6 +74,7 @@ export function PageContent(props: PageContentProps) {
     onUnbanScout,
     onOpenPrescouting,
     onOpenGlobalMatchData,
+    onOpenSettings,
     onPrescoutingQuickScout,
   } = props;
 
@@ -87,6 +91,21 @@ export function PageContent(props: PageContentProps) {
   }
 
   if (location === 'home') {
+    if (isAdminSignedIn && !seasonConfiguration.defaultEventKey) {
+      return (
+        <div className="max-w-4xl mx-auto rounded-2xl border border-amber-500/40 bg-amber-950/20 p-8 text-amber-100 space-y-4">
+          <h2 className="text-2xl font-bold">Season setup required</h2>
+          <p className="text-sm text-amber-200">Set the season year and default event key in Settings before scouts can start the event workflow.</p>
+          <button
+            onClick={onOpenSettings}
+            className="inline-flex items-center justify-center px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-semibold"
+          >
+            Open Settings
+          </button>
+        </div>
+      );
+    }
+
     if (!isAdminSignedIn) {
       return (
         <div className="max-w-4xl mx-auto rounded-2xl border border-slate-700 bg-slate-800/40 p-8 text-slate-300 space-y-4">

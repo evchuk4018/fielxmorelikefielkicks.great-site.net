@@ -1,4 +1,18 @@
-import { MatchScoutData, EndGameClimbResult, AutoClimbResult } from '../types';
+import { MatchScoutData, EndGameClimbResult, AutoClimbResult, PitAnswer, ScoringRuleDefinition } from '../types';
+
+export function getConfiguredScoringTotal(
+  answers: Record<string, PitAnswer>,
+  rules: ScoringRuleDefinition[],
+  pitAnswers: Record<string, PitAnswer> = {},
+): number {
+  return rules.reduce((total, rule) => {
+    const value = (rule.source === 'pit' ? pitAnswers : answers)[rule.key];
+    if (Array.isArray(value)) {
+      return total + value.reduce((sum, item) => sum + (rule.values[item] || 0), 0);
+    }
+    return total + (rule.values[String(value ?? '')] || 0);
+  }, 0);
+}
 
 export const scoring = {
   getTowerPoints(endGameResult: EndGameClimbResult | '', autoResult?: AutoClimbResult): number {

@@ -7,8 +7,6 @@ export const USER_PROFILES_TABLE = 'admin_user_profiles';
 export const GLOBAL_MATCH_DATA_ADMIN_IDS = [
   'admin',
 ] as const;
-export const SCOUT_DEFAULT_EVENT_KEY = '2026mrcmp';
-
 export const MIN_PASSWORD_LENGTH = 8;
 export const PASSWORD_HASH_ITERATIONS = 600000;
 

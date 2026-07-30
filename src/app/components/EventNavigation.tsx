@@ -14,12 +14,13 @@ import {
   Video,
 } from 'lucide-react';
 import { SyncIndicator } from '../../components/SyncIndicator';
-import { CompetitionProfile } from '../../types';
+import { CompetitionProfile, SeasonConfiguration } from '../../types';
 import { EventTab, Location, UserProfile } from '../types';
 
 type EventNavigationProps = {
   location: Location;
   activeProfile: CompetitionProfile | null;
+  seasonConfiguration: SeasonConfiguration;
   activeTab: EventTab;
   isAdminSignedIn: boolean;
   signedInUserProfile: UserProfile | null;
@@ -53,6 +54,7 @@ export function EventNavigation(props: EventNavigationProps) {
   const {
     location,
     activeProfile,
+    seasonConfiguration,
     activeTab,
     isAdminSignedIn,
     signedInUserProfile,
@@ -67,9 +69,12 @@ export function EventNavigation(props: EventNavigationProps) {
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-inner shadow-white/20">
-            <span className="text-white font-bold font-mono text-sm">26</span>
+            <span className="text-white font-bold font-mono text-sm">{String(seasonConfiguration.seasonYear).slice(-2)}</span>
           </div>
-          <span className="font-bold text-lg hidden sm:block tracking-tight text-white">REBUILT Scout</span>
+          <div className="hidden sm:block leading-tight">
+            <span className="block font-bold text-lg tracking-tight text-white">{seasonConfiguration.brandName}</span>
+            <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-400">{seasonConfiguration.gameName}</span>
+          </div>
         </div>
 
         {location === 'event' && activeProfile ? (

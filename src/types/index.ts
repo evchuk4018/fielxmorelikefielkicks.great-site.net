@@ -33,6 +33,60 @@ export interface PitQuestionDefinition {
   showWhen?: PitQuestionVisibility;
 }
 
+export type MatchQuestionType = PitQuestionType;
+
+export interface MatchQuestionDefinition {
+  key: string;
+  label: string;
+  type: MatchQuestionType;
+  options: string[];
+  archived: boolean;
+  order: number;
+  section: string;
+  showWhen?: PitQuestionVisibility;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export type AllianceFilterType = 'boolean' | 'text' | 'number' | 'single_choice' | 'multi_choice';
+
+export interface AllianceFilterDefinition {
+  key: string;
+  label: string;
+  source: 'pit' | 'match';
+  type: AllianceFilterType;
+  archived?: boolean;
+}
+
+export interface ScoringRuleDefinition {
+  key: string;
+  label: string;
+  source: 'pit' | 'match';
+  values: Record<string, number>;
+}
+
+export interface AnalyticsMetricDefinition {
+  key: string;
+  label: string;
+  color: string;
+  enabled: boolean;
+}
+
+export interface SeasonConfiguration {
+  id: string;
+  seasonYear: number;
+  defaultEventKey: string;
+  brandName: string;
+  gameName: string;
+  matchQuestions: MatchQuestionDefinition[];
+  allianceFilters: AllianceFilterDefinition[];
+  scoringRules: ScoringRuleDefinition[];
+  analyticsMetrics: AnalyticsMetricDefinition[];
+  updatedAt?: string;
+  createdAt?: string;
+}
+
 export interface AutonTrajectoryPoint {
   x: number;
   y: number;
@@ -90,6 +144,7 @@ export interface PitScoutData {
 export interface MatchScoutData {
   eventKey?: string;
   matchKey?: string;
+  answers?: PitAnswers;
   validated?: boolean;
   scoutedByAdmin?: boolean;
   scoutedByProfileId?: string;

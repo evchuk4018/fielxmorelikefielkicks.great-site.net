@@ -5,8 +5,8 @@ import { formatMatchLabel } from '../lib/matchUtils';
 import { claimPrescoutingTeam, listActivePrescoutingTeamClaims, releasePrescoutingTeamClaim } from '../lib/supabase';
 import { TBAMatch, PrescoutingTeamClaim } from '../types';
 import { UserProfile } from '../app/types';
-import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
 import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
+import { useSeasonConfiguration } from '../app/hooks/useSeasonConfiguration';
 import { getMatchEventKey, loadAllTeamMatchesForPrescouting, sortMatches } from '../prescouting/matchData';
 import { PrescoutingQuickScoutTarget } from '../prescouting/quickScout';
 import { isTeamMatchAlreadyScouted, loadPrescoutingScoutedIndex, PrescoutingScoutedIndex } from '../prescouting/scoutedEntries';
@@ -42,6 +42,8 @@ type Props = {
 };
 
 export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQuickScout }: Props) {
+  const { configuration: seasonConfiguration, isLoading: isSeasonConfigurationLoading } = useSeasonConfiguration();
+  const seasonYear = seasonConfiguration.seasonYear;
   const [teamMatchesMap, setTeamMatchesMap] = useState<Map<number, TBAMatch[]>>(new Map());
   const [scoutedIndex, setScoutedIndex] = useState<PrescoutingScoutedIndex>(EMPTY_SCOUTED_INDEX);
   const [claimsByTeam, setClaimsByTeam] = useState<Map<number, PrescoutingTeamClaim>>(new Map());
@@ -58,7 +60,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     isLoading: isLoadingTeams,
     error: teamListError,
     reload: reloadTeams,
-  } = usePrescoutingTeamNumbers({ seasonYear: PRESCOUTING_SEASON_YEAR });
+  } = usePrescoutingTeamNumbers({ seasonYear, enabled: !isSeasonConfigurationLoading });
 
   const loadSchedule = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -72,7 +74,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     }
 
     try {
-      const nextMap = await loadAllTeamMatchesForPrescouting(teamNumbers, PRESCOUTING_SEASON_YEAR);
+      const nextMap = await loadAllTeamMatchesForPrescouting(teamNumbers, seasonYear);
       if (sequence !== loadSequence.current) {
         return;
       }
@@ -88,7 +90,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
         setIsLoadingSchedule(false);
       }
     }
-  }, [isLoadingTeams, teamListError, teamNumbers]);
+  }, [isLoadingTeams, seasonYear, teamListError, teamNumbers]);
 
   const loadStatus = useCallback(async () => {
     setIsLoadingStatus(true);
@@ -103,9 +105,15 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
   }, []);
 
   const loadClaims = useCallback(async () => {
+    if (isSeasonConfigurationLoading) {
+      setClaimsByTeam(new Map());
+      setIsLoadingClaims(false);
+      return;
+    }
+
     setIsLoadingClaims(true);
     try {
-      const claims = await listActivePrescoutingTeamClaims(PRESCOUTING_SEASON_YEAR);
+      const claims = await listActivePrescoutingTeamClaims(seasonYear);
       setClaimsByTeam(buildClaimMap(claims));
     } catch (loadError) {
       console.error('Failed to load team claims:', loadError);
@@ -114,7 +122,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     } finally {
       setIsLoadingClaims(false);
     }
-  }, []);
+  }, [isSeasonConfigurationLoading, seasonYear]);
 
   const claimTeam = useCallback(async (teamNumber: number) => {
     if (!signedInUserProfile) {
@@ -129,7 +137,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     setClaimActionByTeam((current) => ({ ...current, [teamNumber]: 'claim' }));
     try {
       const claim = await claimPrescoutingTeam({
-        seasonYear: PRESCOUTING_SEASON_YEAR,
+        seasonYear,
         teamNumber,
         claimerProfileId: signedInUserProfile.id,
         claimerName: signedInUserProfile.name,
@@ -153,7 +161,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
         return next;
       });
     }
-  }, [claimActionByTeam, loadClaims, signedInUserProfile]);
+  }, [claimActionByTeam, loadClaims, seasonYear, signedInUserProfile]);
 
   const releaseTeam = useCallback(async (teamNumber: number) => {
     if (!isAdminSignedIn || !signedInUserProfile) {
@@ -178,7 +186,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
     setClaimActionByTeam((current) => ({ ...current, [teamNumber]: 'release' }));
     try {
       await releasePrescoutingTeamClaim({
-        seasonYear: PRESCOUTING_SEASON_YEAR,
+        seasonYear,
         teamNumber,
         releasedByProfileId: signedInUserProfile.id,
         isAdmin: isAdminSignedIn,
@@ -202,7 +210,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
         return next;
       });
     }
-  }, [claimActionByTeam, claimsByTeam, isAdminSignedIn, loadClaims, signedInUserProfile]);
+  }, [claimActionByTeam, claimsByTeam, isAdminSignedIn, loadClaims, seasonYear, signedInUserProfile]);
 
   const handleQuickScout = useCallback((column: MatchColumn, teamNumber: number, covered: boolean) => {
     if (covered || !onQuickScout) {
@@ -437,7 +445,7 @@ export function PrescoutingCoverage({ isAdminSignedIn, signedInUserProfile, onQu
           <div>
             <h2 className="text-2xl font-bold text-white">Prescouting Coverage Matrix</h2>
             <p className="mt-1 text-sm text-slate-300">
-              {teamNumbers.length} configured teams across all {PRESCOUTING_SEASON_YEAR} matches they played in every event.
+              {teamNumbers.length} configured teams across all {seasonYear} matches they played in every event.
             </p>
             <p className="mt-1 text-xs text-slate-400">
               Claims are advisory only. Any scout can still proceed scouting after warning.

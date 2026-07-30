@@ -74,7 +74,7 @@ export async function createCompetitionProfile(params: {
     return;
   }
 
-  const rawEventKey = window.prompt('Enter TBA event key (example: 2026paphi):', '') || '';
+  const rawEventKey = window.prompt('Enter TBA event key (example: 20xxpaphi):', '') || '';
   const eventKey = rawEventKey.trim().toLowerCase();
   if (!eventKey) {
     return;

@@ -1,8 +1,5 @@
 import { useDeferredValue, useMemo, useRef } from 'react';
-import {
-  METRIC_META,
-  STRIP_ORDER,
-} from '../constants';
+import { STRIP_ORDER } from '../constants';
 import {
   EntryCounts,
   EventTeam,
@@ -39,6 +36,7 @@ type UseRawDataDerivedArgs = {
   activeEventKey: string;
   teamYears: TeamYearPoint[];
   visibleMetrics: Record<MetricKey, boolean>;
+  metricMeta: Record<MetricKey, { label: string; color: string }>;
 };
 
 type UseRawDataDerivedResult = {
@@ -66,6 +64,7 @@ export function useRawDataDerived({
   activeEventKey,
   teamYears,
   visibleMetrics,
+  metricMeta,
 }: UseRawDataDerivedArgs): UseRawDataDerivedResult {
   const stripSummaryCacheRef = useRef<Map<string, StripSummary[]>>(new Map());
   const teleopSummaryCacheRef = useRef<Map<string, TeleopSummary>>(new Map());
@@ -360,8 +359,8 @@ export function useRawDataDerived({
   }, [teamYears]);
 
   const activeMetricKeys = useMemo(
-    () => (Object.keys(METRIC_META) as MetricKey[]).filter((key) => visibleMetrics[key]),
-    [visibleMetrics],
+    () => (Object.keys(metricMeta) as MetricKey[]).filter((key) => visibleMetrics[key]),
+    [metricMeta, visibleMetrics],
   );
 
   const graphData = useMemo(() => {

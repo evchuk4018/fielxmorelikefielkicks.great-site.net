@@ -1,5 +1,5 @@
 {
-  "name": "FRC 2026 REBUILT Scouting App",
-  "description": "Offline-first scouting app for the 2026 FRC game REBUILT presented by Haas.",
+  "name": "FRC Season Scouting App",
+  "description": "Offline-first, season-configurable FRC scouting app.",
   "requestFramePermissions": []
 }

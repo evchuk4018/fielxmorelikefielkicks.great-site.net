@@ -15,9 +15,10 @@ import { useInitialAppLoad } from './app/hooks/useInitialAppLoad';
 import { useLoginProfileSelection } from './app/hooks/useLoginProfileSelection';
 import { useRouteGuards } from './app/hooks/useRouteGuards';
 import { useUserProfilePolling } from './app/hooks/useUserProfilePolling';
-import { GLOBAL_MATCH_DATA_ADMIN_IDS, SCOUT_DEFAULT_EVENT_KEY } from './app/constants';
+import { GLOBAL_MATCH_DATA_ADMIN_IDS } from './app/constants';
 import { PrescoutingQuickScoutTarget, setPendingPrescoutingQuickScout } from './prescouting/quickScout';
 import { FieldMapProvider } from './app/context/FieldMapContext';
+import { useSeasonConfiguration } from './app/hooks/useSeasonConfiguration';
 const GLOBAL_MATCH_DATA_ADMIN_ID_SET = new Set<string>(GLOBAL_MATCH_DATA_ADMIN_IDS);
 
 export default function App() {
@@ -54,6 +55,7 @@ export default function App() {
     setSelectedLoginProfileId,
     resetAuthInputs,
   } = useAppState();
+  const { configuration: seasonConfiguration, isLoading: isSeasonConfigurationLoading } = useSeasonConfiguration();
 
   useInitialAppLoad({
     setProfiles,
@@ -124,11 +126,20 @@ export default function App() {
       return;
     }
 
+    if (isSeasonConfigurationLoading) {
+      return;
+    }
+
+    if (!seasonConfiguration.defaultEventKey) {
+      setLocation('home');
+      return;
+    }
+
     let cancelled = false;
 
     const ensureDefaultScoutEvent = async () => {
       await ensureScoutDefaultEventProfile({
-        eventKey: SCOUT_DEFAULT_EVENT_KEY,
+        eventKey: seasonConfiguration.defaultEventKey,
         setProfiles,
         setActiveProfile,
       });
@@ -149,7 +160,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, isAdminSignedIn, isScoutSignedIn, setActiveProfile, setActiveTab, setLocation, setProfiles, signedInUserProfile]);
+  }, [activeTab, isAdminSignedIn, isSeasonConfigurationLoading, isScoutSignedIn, seasonConfiguration.defaultEventKey, setActiveProfile, setActiveTab, setLocation, setProfiles, signedInUserProfile]);
 
   const handleSignOutUserProfile = async () => {
     await signOutUserProfile({
@@ -295,6 +306,7 @@ export default function App() {
             <EventNavigation
               location={location}
               activeProfile={activeProfile}
+              seasonConfiguration={seasonConfiguration}
               activeTab={activeTab}
               isAdminSignedIn={isAdminSignedIn}
               signedInUserProfile={signedInUserProfile}
@@ -317,6 +329,7 @@ export default function App() {
                 activeTab={activeTab}
                 profiles={profiles}
                 activeProfile={activeProfile}
+                seasonConfiguration={seasonConfiguration}
                 isCreatingProfile={isCreatingProfile}
                 userProfiles={userProfiles}
                 onCreateProfile={handleCreateProfile}
@@ -325,6 +338,7 @@ export default function App() {
                 onUnbanScout={handleUnbanScout}
                 onOpenPrescouting={handleOpenPrescouting}
                 onOpenGlobalMatchData={handleOpenGlobalMatchData}
+                onOpenSettings={() => setIsSettingsOpen(true)}
                 onPrescoutingQuickScout={handlePrescoutingQuickScout}
               />
             </main>

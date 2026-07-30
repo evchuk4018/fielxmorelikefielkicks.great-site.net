@@ -1,1 +1,0 @@
-export const PRESCOUTING_SEASON_YEAR = 2026;

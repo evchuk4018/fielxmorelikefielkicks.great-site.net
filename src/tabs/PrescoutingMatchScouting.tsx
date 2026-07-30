@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, PlayCircle } from 'lucide-react';
 import { MatchScoutingFormState, MatchScoutingSections } from '../components/MatchScoutingSections';
+import { MatchQuestionnaire } from '../components/MatchQuestionnaire';
 import { compLevelSortOrder, formatMatchLabel, toTeamNumber } from '../lib/matchUtils';
 import { buildMatchScoutStorageKey, getMatchScoutStorageKeyCandidates, storage } from '../lib/storage';
 import { listActivePrescoutingTeamClaims } from '../lib/supabase';
-import { MatchScoutData, PrescoutingTeamClaim, TBAMatch } from '../types';
-import { PRESCOUTING_SEASON_YEAR } from '../prescouting/constants';
+import { MatchScoutData, PitAnswer, PrescoutingTeamClaim, TBAMatch } from '../types';
 import { usePrescoutingTeamMatches } from '../prescouting/hooks/usePrescoutingTeamMatches';
 import { usePrescoutingTeamNumbers } from '../prescouting/hooks/usePrescoutingTeamNumbers';
+import { useSeasonConfiguration } from '../app/hooks/useSeasonConfiguration';
 import { getMatchEventKey, loadYoutubeVideoForMatch } from '../prescouting/matchData';
 import {
   clearPendingPrescoutingQuickScout,
@@ -80,12 +81,15 @@ function buildClaimMap(claims: PrescoutingTeamClaim[]): Map<number, PrescoutingT
 }
 
 export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutProfileId }: Props) {
+  const { configuration: seasonConfiguration, isLoading: isSeasonConfigurationLoading } = useSeasonConfiguration();
+  const seasonYear = seasonConfiguration.seasonYear;
   const [selectedTeamNumber, setSelectedTeamNumber] = useState<number | null>(null);
   const [selectedMatchKey, setSelectedMatchKey] = useState('');
   const [videoEmbedUrl, setVideoEmbedUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [formState, setFormState] = useState<MatchScoutingFormState>(EMPTY_FORM);
+  const [matchAnswers, setMatchAnswers] = useState<Record<string, PitAnswer>>({});
   const [claimsByTeam, setClaimsByTeam] = useState<Map<number, PrescoutingTeamClaim>>(new Map());
   const [isLoadingClaims, setIsLoadingClaims] = useState(true);
   const [warningTeamNumber, setWarningTeamNumber] = useState<number | null>(null);
@@ -108,26 +112,32 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
     isLoading: isLoadingTeams,
     error: teamListError,
     reload: reloadTeams,
-  } = usePrescoutingTeamNumbers({ seasonYear: PRESCOUTING_SEASON_YEAR });
+  } = usePrescoutingTeamNumbers({ seasonYear, enabled: !isSeasonConfigurationLoading });
 
   const { matches, isLoading: matchesLoading, error: matchesError } = usePrescoutingTeamMatches(
     selectedTeamNumber,
-    PRESCOUTING_SEASON_YEAR,
+    seasonYear,
   );
 
   const orderedMatches = useMemo(() => sortByDisplayOrder(matches), [matches]);
 
   const loadClaims = useCallback(async () => {
+    if (isSeasonConfigurationLoading) {
+      setClaimsByTeam(new Map());
+      setIsLoadingClaims(false);
+      return;
+    }
+
     setIsLoadingClaims(true);
     try {
-      const claims = await listActivePrescoutingTeamClaims(PRESCOUTING_SEASON_YEAR);
+      const claims = await listActivePrescoutingTeamClaims(seasonYear);
       setClaimsByTeam(buildClaimMap(claims));
     } catch (error) {
       console.error('Failed to load prescouting claims:', error);
     } finally {
       setIsLoadingClaims(false);
     }
-  }, []);
+  }, [isSeasonConfigurationLoading, seasonYear]);
 
   const attemptTeamSelection = useCallback((teamNumber: number | null): boolean => {
     if (!teamNumber) {
@@ -290,6 +300,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
   useEffect(() => {
     if (!selectedTeamNumber || !selectedMatch) {
       setFormState(EMPTY_FORM);
+      setMatchAnswers({});
       return;
     }
 
@@ -303,6 +314,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
 
     if (!saved?.data) {
       setFormState(EMPTY_FORM);
+      setMatchAnswers({});
       return;
     }
 
@@ -316,6 +328,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
       defenseNotes: data.defenseNotes || '',
       notes: data.notes || '',
     });
+    setMatchAnswers(data.answers || {});
   }, [selectedMatch, selectedTeamNumber]);
 
   useEffect(() => {
@@ -416,6 +429,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
       matchNumber: selectedMatch.match_number,
       teamNumber: selectedTeamNumber,
       allianceColor: resolveAllianceColor(selectedMatch, selectedTeamNumber),
+      answers: matchAnswers,
       leftStartingZone: false,
       autoFuelScored: 0,
       autoClimbAttempted: false,
@@ -474,11 +488,11 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
         <div>
           <h2 className="text-2xl font-bold text-white">Prescouting Match Scouting</h2>
           <p className="text-sm text-slate-300 mt-1">
-            Select one of the configured teams, choose one of its {PRESCOUTING_SEASON_YEAR} matches, watch the video, and scout with the standard flow.
+             Select one of the configured teams, choose one of its {seasonYear} matches, watch the video, and scout with the standard flow.
           </p>
         </div>
 
-        {isLoadingTeams && (
+        {(isLoadingTeams || isSeasonConfigurationLoading) && (
           <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-300 inline-flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
             Loading configured Prescouting teams...
@@ -581,7 +595,7 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
 
         {selectedTeamNumber && !matchesLoading && !matchesError && orderedMatches.length === 0 && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">
-            No matches found for Team {selectedTeamNumber} in {PRESCOUTING_SEASON_YEAR}.
+            No matches found for Team {selectedTeamNumber} in {seasonYear}.
           </div>
         )}
       </div>
@@ -626,6 +640,12 @@ export function PrescoutingMatchScouting({ isAdminScout, adminProfileId, scoutPr
           This team and match has already been scouted. Duplicate scouting is blocked.
         </div>
       )}
+
+      <MatchQuestionnaire
+        questions={seasonConfiguration.matchQuestions}
+        answers={matchAnswers}
+        onChange={(key, value) => setMatchAnswers((current) => ({ ...current, [key]: value }))}
+      />
 
       <MatchScoutingSections
         readyToScout={readyToScout}

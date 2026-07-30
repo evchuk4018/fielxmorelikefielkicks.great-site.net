@@ -412,7 +412,7 @@ Do not use `VITE_TBA_API_KEY`. The repository's TBA handlers read `process.env.T
 The app asks for a TBA event key when an admin creates a competition profile. An event key normally contains the year and the TBA event code, for example:
 
 ```text
-2026paphi
+20xxpaphi
 ```
 
 To find an event key, open that event on TBA and inspect the event URL or event details. Enter the key in lowercase when possible; the app normalizes it to lowercase.
@@ -737,7 +737,7 @@ In Settings, open the **Prescouting Teams** section.
 - Duplicate team numbers are removed.
 - Save the list.
 
-The current schema seeds a 2026 list. Replace it with the teams and season that your team actually wants to prescout. Existing claims and scouting records are retained even if a team is later removed from the active configuration.
+The schema does not seed a season-specific team list. Set the season year in Settings, then replace the Prescouting team list with the roster your team wants to scout. Existing claims and scouting records are retained even if a team is later removed from the active configuration.
 
 ### 14.5 Upload the field map
 

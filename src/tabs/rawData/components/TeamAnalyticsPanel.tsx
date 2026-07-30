@@ -1,5 +1,4 @@
 import React from 'react';
-import { METRIC_META } from '../constants';
 import { GraphData, MetricKey, TeamDisplay, TeamYearPoint } from '../types';
 
 type TeamAnalyticsPanelProps = {
@@ -13,6 +12,7 @@ type TeamAnalyticsPanelProps = {
   teamYears: TeamYearPoint[];
   activeMetricKeys: MetricKey[];
   graphData: GraphData;
+  metricMeta: Record<MetricKey, { label: string; color: string }>;
 };
 
 export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
@@ -26,6 +26,7 @@ export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
   teamYears,
   activeMetricKeys,
   graphData,
+  metricMeta,
 }: TeamAnalyticsPanelProps) {
   return (
     <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-xl">
@@ -60,7 +61,7 @@ export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        {(Object.keys(METRIC_META) as MetricKey[]).map((metric) => (
+        {(Object.keys(metricMeta) as MetricKey[]).map((metric) => (
           <button
             key={metric}
             onClick={() => toggleMetric(metric)}
@@ -70,7 +71,7 @@ export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
                 : 'bg-slate-900 border-slate-700 text-slate-400'
             }`}
           >
-            {METRIC_META[metric].label}
+            {metricMeta[metric].label}
           </button>
         ))}
       </div>
@@ -97,7 +98,7 @@ export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
               <polyline
                 key={metric}
                 fill="none"
-                stroke={METRIC_META[metric].color}
+                stroke={metricMeta[metric].color}
                 strokeWidth="2.5"
                 points={graphData.series[metric]}
               />
@@ -134,8 +135,8 @@ export const TeamAnalyticsPanel = React.memo(function TeamAnalyticsPanel({
       <div className="mt-3 flex flex-wrap gap-3 text-xs">
         {activeMetricKeys.map((metric) => (
           <div key={metric} className="flex items-center gap-2 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: METRIC_META[metric].color }} />
-            {METRIC_META[metric].label}
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: metricMeta[metric].color }} />
+            {metricMeta[metric].label}
           </div>
         ))}
       </div>

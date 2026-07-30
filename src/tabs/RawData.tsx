@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { TeamListPanel } from './rawData/components/TeamListPanel';
 import { TeamAnalyticsPanel } from './rawData/components/TeamAnalyticsPanel';
 import { ScoutingDataPanel } from './rawData/components/ScoutingDataPanel';
@@ -12,6 +12,8 @@ import { useNoteSummary } from './rawData/hooks/useNoteSummary';
 import { useRawerMatchRecords } from './rawData/hooks/useRawerMatchRecords';
 import { MetricKey, RawDataProps, RawDataViewMode } from './rawData/types';
 import { parseEventYear } from './rawData/utils';
+import { METRIC_META } from './rawData/constants';
+import { useSeasonConfiguration } from '../app/hooks/useSeasonConfiguration';
 
 export function RawData({
   eventKey,
@@ -25,6 +27,17 @@ export function RawData({
   const isGlobalScope = scope === 'global';
   const activeEventKey = eventKey.trim().toLowerCase();
   const activeSeasonYear = useMemo(() => parseEventYear(eventKey), [eventKey]);
+  const { configuration: seasonConfiguration } = useSeasonConfiguration();
+  const metricMeta = useMemo(() => {
+    const configuredByKey = new Map(seasonConfiguration.analyticsMetrics.map((metric) => [metric.key, metric]));
+    return (Object.keys(METRIC_META) as MetricKey[]).reduce((result, key) => {
+      const configured = configuredByKey.get(key);
+      if (!configured || configured.enabled) {
+        result[key] = configured || METRIC_META[key];
+      }
+      return result;
+    }, {} as Record<MetricKey, { label: string; color: string }>);
+  }, [seasonConfiguration.analyticsMetrics]);
 
   const {
     eventTeams,
@@ -53,6 +66,18 @@ export function RawData({
     teleop_points: true,
     endgame_points: true,
   });
+
+  useEffect(() => {
+    setVisibleMetrics((previous) => ({
+      ...previous,
+      ...seasonConfiguration.analyticsMetrics.reduce((result, metric) => {
+        if (metric.key in METRIC_META) {
+          result[metric.key as MetricKey] = metric.enabled;
+        }
+        return result;
+      }, {} as Record<MetricKey, boolean>),
+    }));
+  }, [seasonConfiguration.analyticsMetrics]);
 
   const { teamYears, isLoadingYears, yearError } = useTeamYears({
     scope,
@@ -84,6 +109,7 @@ export function RawData({
     activeEventKey,
     teamYears,
     visibleMetrics,
+    metricMeta,
   });
 
   const {
@@ -213,6 +239,7 @@ export function RawData({
                     teamYears={teamYears}
                     activeMetricKeys={activeMetricKeys}
                     graphData={graphData}
+                    metricMeta={metricMeta}
                   />
 
                   <ScoutingDataPanel
