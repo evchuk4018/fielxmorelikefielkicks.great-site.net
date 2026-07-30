@@ -166,6 +166,7 @@ values (
   '61646d696e2d70696e2d7631',
   null,
   null,
+  null,
   null
 )
 on conflict (id) do update set
